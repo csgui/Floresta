@@ -19,6 +19,7 @@ use bitcoin::Block;
 use bitcoin::BlockHash;
 use bitcoin::Transaction;
 use floresta_common::impl_error_from;
+use floresta_mempool::mempool::Mempool;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::spawn;
@@ -32,7 +33,6 @@ use tracing::error;
 use tracing::warn;
 
 use self::peer_utils::make_pong;
-use super::mempool::Mempool;
 use super::node::NodeNotification;
 use super::node::NodeRequest;
 use super::transport::TransportError;

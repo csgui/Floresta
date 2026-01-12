@@ -11,6 +11,7 @@ members = [
     "crates/floresta-electrum",
     "crates/floresta-watch-only",
     "crates/floresta-wire",
+    "crates/floresta-mempool",
 
     # Binaries
     "bin/florestad",
@@ -31,6 +32,7 @@ default-members = [
     "crates/floresta-electrum",
     "crates/floresta-watch-only",
     "crates/floresta-wire",
+    "crates/floresta-mempool",
     "bin/florestad",
     "bin/floresta-cli",
 ]
@@ -71,6 +73,7 @@ floresta-chain = { path = "crates/floresta-chain" }
 floresta-common = { path = "crates/floresta-common" }
 floresta-compact-filters = { path = "crates/floresta-compact-filters" }
 floresta-electrum = { path = "crates/floresta-electrum" }
+floresta-mempool = { path = "crates/floresta-mempool" }
 floresta-node = { path = "crates/floresta-node", default-features = false }
 floresta-rpc = { path = "crates/floresta-rpc" }
 floresta-watch-only = { path = "crates/floresta-watch-only" }

@@ -97,7 +97,6 @@ pub mod address_man;
 pub mod block_proof;
 pub mod chain_selector;
 pub mod error;
-pub mod mempool;
 pub mod node;
 pub mod node_context;
 pub mod node_interface;

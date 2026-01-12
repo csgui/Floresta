@@ -32,6 +32,7 @@ floresta-watch-only = { workspace = true }
 floresta-wire = { workspace = true }
 
 [dev-dependencies]
+floresta-mempool = { workspace = true }
 rand = { workspace = true }
 rcgen = { workspace = true }
 zstd = { workspace = true }

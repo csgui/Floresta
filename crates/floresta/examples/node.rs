@@ -12,7 +12,7 @@ use bitcoin::BlockHash;
 use bitcoin::Network;
 use floresta::chain::BlockchainInterface;
 use floresta::chain::ChainState;
-use floresta::wire::mempool::Mempool;
+use floresta::mempool::Mempool;
 use floresta::wire::node::UtreexoNode;
 use floresta_chain::AssumeValidArg;
 use floresta_chain::FlatChainStore;

@@ -38,6 +38,8 @@ pub use floresta_common as common;
 #[cfg(feature = "electrum-server")]
 /// An electrum server implementation
 pub use floresta_electrum as electrum;
+/// A mempool implementation
+pub use floresta_mempool as mempool;
 #[cfg(feature = "watch-only-wallet")]
 /// A watch-only wallet implementation, optimized for electrum servers.
 pub use floresta_watch_only as wallet;
