@@ -1,0 +1,15 @@
+[package]
+name = "floresta-domain"
+version = "0.0.1"
+edition = "2021"
+authors = ["Floresta Developers <contact@getfloresta.org>"]
+license = "MIT"
+repository = "https://github.com/getfloresta/Floresta"
+keywords = ["bitcoin", "mempool"]
+
+[dependencies]
+bitcoin = { workspace = true, features = ["serde", "std"] }
+rustreexo = { workspace = true }
+
+[lints]
+workspace = true
