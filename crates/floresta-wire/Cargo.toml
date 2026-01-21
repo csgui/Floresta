@@ -36,6 +36,7 @@ floresta-domain = { workspace = true }
 metrics = { workspace = true,  optional = true }
 
 [dev-dependencies]
+floresta-mempool = { workspace = true }
 zstd = { workspace = true }
 
 [features]

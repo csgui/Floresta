@@ -23,7 +23,7 @@ use floresta_chain::FlatChainStoreConfig;
 use floresta_common::service_flags;
 use floresta_common::service_flags::UTREEXO;
 use floresta_common::FractionAvg;
-use floresta_mempool::mempool::Mempool;
+use floresta_mempool::Mempool;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use rustreexo::accumulator::pollard::Pollard;
