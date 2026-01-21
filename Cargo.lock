@@ -1086,6 +1086,7 @@ dependencies = [
  "bitcoin",
  "floresta-chain",
  "floresta-common",
+ "floresta-domain",
  "rand",
  "rustreexo",
 ]
@@ -1160,7 +1161,7 @@ dependencies = [
  "floresta-chain",
  "floresta-common",
  "floresta-compact-filters",
- "floresta-mempool",
+ "floresta-domain",
  "metrics",
  "rand",
  "rustls",

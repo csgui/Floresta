@@ -23,6 +23,7 @@ use floresta_chain::proof_util;
 use floresta_chain::pruned_utreexo::BlockchainInterface;
 use floresta_chain::CompactLeafData;
 use floresta_chain::LeafData;
+use floresta_domain::mempool::MempoolInterface;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 use rustreexo::accumulator::pollard::Pollard;
 use rustreexo::accumulator::pollard::PollardAddition;
@@ -89,6 +90,22 @@ pub struct Mempool {
 }
 
 unsafe impl Send for Mempool {}
+
+impl MempoolInterface for Mempool {
+    fn get_transaction(&self, txid: &Txid) -> Option<&Transaction> {
+        todo!()
+    }
+
+    fn get_from_mempool(&self, txid: &Txid) -> Option<&Transaction> {
+        let id = self.hasher.hash_one(txid);
+
+        self.transactions.get(&id).map(|tx| &tx.transaction)
+    }
+
+    fn list_transactions(&self) -> Vec<Txid> {
+        todo!()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// An error returned when we try to add a transaction to the mempool.
@@ -573,12 +590,6 @@ impl Mempool {
         );
 
         Ok(())
-    }
-
-    /// Get a transaction from the mempool.
-    pub fn get_from_mempool<'a>(&'a self, id: &Txid) -> Option<&'a Transaction> {
-        let id = self.hasher.hash_one(id);
-        self.transactions.get(&id).map(|tx| &tx.transaction)
     }
 
     /// Get all transactions that were in the mempool for more than 1 hour, if any

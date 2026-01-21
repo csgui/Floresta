@@ -19,7 +19,7 @@ use bitcoin::Block;
 use bitcoin::BlockHash;
 use bitcoin::Transaction;
 use floresta_common::impl_error_from;
-use floresta_mempool::mempool::Mempool;
+use floresta_domain::utreexo::UtreexoMempool as Mempool;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 use tokio::spawn;
@@ -97,7 +97,7 @@ pub fn create_actors<R: AsyncRead + Unpin + Send>(
 }
 
 pub struct Peer<T: AsyncWrite + Unpin + Send + Sync> {
-    mempool: Arc<Mutex<Mempool>>,
+    mempool: Arc<Mutex<dyn Mempool>>,
     blocks_only: bool,
     services: ServiceFlags,
     user_agent: String,
@@ -593,7 +593,7 @@ impl<T: AsyncWrite + Unpin + Send + Sync> Peer<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn create_peer<W: AsyncWrite + Unpin + Send + Sync + 'static>(
         id: u32,
-        mempool: Arc<Mutex<Mempool>>,
+        mempool: Arc<Mutex<dyn Mempool>>,
         node_tx: UnboundedSender<NodeNotification>,
         node_requests: UnboundedReceiver<NodeRequest>,
         address_id: usize,

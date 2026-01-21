@@ -16,6 +16,7 @@ rustreexo = { workspace = true }
 
 # Local dependencies
 floresta-chain = { workspace = true, features = ["flat-chainstore"] }
+floresta-domain = { workspace = true }
 
 [dev-dependencies]
 floresta-common = { workspace = true }
