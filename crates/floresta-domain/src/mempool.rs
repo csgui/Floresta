@@ -8,4 +8,5 @@ pub trait MempoolInterface: Send {
     fn get_from_mempool(&self, txid: &Txid) -> Option<&Transaction>;
     /// Lists all transaction IDs currently in the mempool.
     fn list_transactions(&self) -> Vec<Txid>;
+    fn get_stale(&mut self) -> Vec<Txid>;
 }

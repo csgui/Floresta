@@ -105,6 +105,20 @@ impl MempoolInterface for Mempool {
     fn list_transactions(&self) -> Vec<Txid> {
         todo!()
     }
+
+    fn get_stale(&mut self) -> Vec<Txid> {
+        // Get all transactions that were in the mempool for more than 1 hour, if any
+        self.transactions
+            .iter()
+            .filter_map(|(_, tx)| {
+                let txid = tx.transaction.compute_txid();
+                match tx.time.elapsed() > Duration::from_secs(3600) {
+                    true => Some(txid),
+                    false => None,
+                }
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -590,20 +604,6 @@ impl Mempool {
         );
 
         Ok(())
-    }
-
-    /// Get all transactions that were in the mempool for more than 1 hour, if any
-    pub fn get_stale(&mut self) -> Vec<Txid> {
-        self.transactions
-            .iter()
-            .filter_map(|(_, tx)| {
-                let txid = tx.transaction.compute_txid();
-                match tx.time.elapsed() > Duration::from_secs(3600) {
-                    true => Some(txid),
-                    false => None,
-                }
-            })
-            .collect()
     }
 }
 
