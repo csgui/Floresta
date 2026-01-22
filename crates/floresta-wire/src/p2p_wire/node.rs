@@ -33,8 +33,8 @@ use floresta_common::service_flags::UTREEXO;
 use floresta_common::FractionAvg;
 use floresta_compact_filters::flat_filters_store::FlatFiltersStore;
 use floresta_compact_filters::network_filters::NetworkFilters;
-use floresta_mempool::mempool::Mempool;
-use floresta_mempool::mempool::MempoolProof;
+use floresta_domain::utreexo::MempoolProof;
+use floresta_domain::utreexo::UtreexoMempool as Mempool;
 use rand::seq::SliceRandom;
 use rustreexo::accumulator::proof::Proof;
 use serde::Deserialize;
@@ -270,7 +270,7 @@ pub struct NodeCommon<Chain: ChainBackend> {
     // 1. Core Blockchain and Transient Data
     pub(crate) chain: Chain,
     pub(crate) blocks: HashMap<BlockHash, InflightBlock>,
-    pub(crate) mempool: Arc<tokio::sync::Mutex<Mempool>>,
+    pub(crate) mempool: Arc<Mutex<dyn Mempool>>,
     pub(crate) block_filters: Option<Arc<NetworkFilters<FlatFiltersStore>>>,
     pub(crate) last_filter: BlockHash,
 
@@ -372,7 +372,7 @@ where
     pub fn new(
         config: UtreexoNodeConfig,
         chain: Chain,
-        mempool: Arc<Mutex<Mempool>>,
+        mempool: Arc<Mutex<dyn Mempool>>,
         block_filters: Option<Arc<NetworkFilters<FlatFiltersStore>>>,
         kill_signal: Arc<tokio::sync::RwLock<bool>>,
         address_man: AddressMan,
@@ -1954,7 +1954,7 @@ where
         address: LocalAddress,
         requests_rx: UnboundedReceiver<NodeRequest>,
         peer_id_count: u32,
-        mempool: Arc<Mutex<Mempool>>,
+        mempool: Arc<Mutex<dyn Mempool>>,
         network: Network,
         node_tx: UnboundedSender<NodeNotification>,
         user_agent: String,
@@ -1997,7 +1997,7 @@ where
     pub(crate) async fn open_proxy_connection(
         proxy: SocketAddr,
         kind: ConnectionKind,
-        mempool: Arc<Mutex<Mempool>>,
+        mempool: Arc<Mutex<dyn Mempool>>,
         network: Network,
         node_tx: UnboundedSender<NodeNotification>,
         peer_id: usize,
