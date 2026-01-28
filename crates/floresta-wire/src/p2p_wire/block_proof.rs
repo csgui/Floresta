@@ -25,9 +25,9 @@ use bitcoin::consensus::Encodable;
 use bitcoin::hashes::sha256;
 use bitcoin::BlockHash;
 use bitcoin::VarInt;
-use floresta_chain::CompactLeafData;
-use floresta_chain::ScriptPubKeyKind;
 use floresta_common::read_bounded_len;
+use floresta_domain::utreexo::CompactLeafData;
+use floresta_domain::utreexo::ScriptPubKeyKind;
 use rustreexo::accumulator::node_hash::BitcoinNodeHash;
 
 /// The maximum possible inputs you can have per block.

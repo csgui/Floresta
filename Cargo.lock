@@ -931,6 +931,7 @@ dependencies = [
  "bitcoinkernel",
  "criterion",
  "floresta-common",
+ "floresta-domain",
  "hex",
  "lru",
  "memmap2",
@@ -983,6 +984,7 @@ version = "0.1.0"
 dependencies = [
  "bitcoin",
  "rustreexo",
+ "sha2",
 ]
 
 [[package]]
@@ -1103,6 +1105,7 @@ dependencies = [
  "floresta-chain",
  "floresta-common",
  "floresta-compact-filters",
+ "floresta-domain",
  "floresta-mempool",
  "metrics",
  "rand",
