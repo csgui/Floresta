@@ -16,8 +16,8 @@ use bitcoin::OutPoint;
 use bitcoin::Txid;
 use floresta_common::impl_error_from;
 use floresta_common::prelude::*;
+use floresta_domain::utreexo::UtreexoLeafError;
 
-use crate::proof_util::UtreexoLeafError;
 use crate::pruned_utreexo::chain_state_builder::BlockchainBuilderError;
 
 pub trait DatabaseError: Debug + Send + Sync + 'static {}

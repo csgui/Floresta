@@ -4,7 +4,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use bitcoin::p2p::ServiceFlags;
-use floresta_chain::proof_util;
 use floresta_chain::ThreadSafeChain;
 use floresta_common::service_flags;
 use floresta_common::service_flags::UTREEXO;
@@ -55,7 +54,7 @@ impl<Chain> UtreexoNode<Chain, SyncNode>
 where
     Chain: ThreadSafeChain,
     WireError: From<Chain::Error>,
-    Chain::Error: From<proof_util::UtreexoLeafError>,
+    Chain::Error: From<floresta_domain::utreexo::UtreexoLeafError>,
 {
     /// Computes the next blocks to request, and sends a GETDATA request
     ///

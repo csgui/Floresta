@@ -983,6 +983,7 @@ name = "floresta-domain"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
+ "floresta-common",
  "rustreexo",
  "sha2",
 ]

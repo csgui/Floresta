@@ -10,7 +10,6 @@ use bitcoin::bip158::BlockFilter;
 use bitcoin::p2p::address::AddrV2Message;
 use bitcoin::p2p::ServiceFlags;
 use bitcoin::BlockHash;
-use floresta_chain::proof_util;
 use floresta_chain::pruned_utreexo::partial_chain::PartialChainState;
 use floresta_chain::pruned_utreexo::BlockchainInterface;
 use floresta_chain::pruned_utreexo::UpdatableChainstate;
@@ -78,7 +77,7 @@ impl<Chain> UtreexoNode<Chain, RunningNode>
 where
     Chain: ThreadSafeChain + Clone,
     WireError: From<Chain::Error>,
-    Chain::Error: From<proof_util::UtreexoLeafError>,
+    Chain::Error: From<floresta_domain::utreexo::UtreexoLeafError>,
 {
     fn send_addresses(&mut self) -> Result<(), WireError> {
         let addresses = self

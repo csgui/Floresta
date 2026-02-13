@@ -3,7 +3,9 @@
 
 use floresta_domain::utreexo::CompactLeafData;
 use floresta_domain::utreexo::LeafData;
+use floresta_domain::utreexo::LeafErrorKind;
 use floresta_domain::utreexo::ScriptPubKeyKind;
+use floresta_domain::utreexo::UtreexoLeafError;
 
 /// This module provides utility functions for working with Utreexo proofs.
 ///
@@ -11,7 +13,6 @@ use floresta_domain::utreexo::ScriptPubKeyKind;
 /// to consume a block (delete transactions included in it from the mempool);
 /// or to validate a block.
 pub mod proof_util {
-    use bitcoin::blockdata::script;
     use bitcoin::blockdata::script::Instruction;
     use bitcoin::consensus::Encodable;
     use bitcoin::hashes::sha256;
@@ -37,49 +38,14 @@ pub mod proof_util {
 
     use super::CompactLeafData;
     use super::LeafData;
+    use super::LeafErrorKind;
     use super::ScriptPubKeyKind;
+    use super::UtreexoLeafError;
     use crate::prelude::*;
     use crate::pruned_utreexo::utxo_data::UtxoData;
     use crate::BlockchainError;
 
-    #[derive(Debug)]
-    /// Errors that may occur while reconstructing a leaf's scriptPubKey.
-    pub enum LeafErrorKind {
-        /// The witness or scriptsig was empty, so nothing could be inspected.
-        EmptyStack,
-
-        /// The scriptsig data could not be parsed into `Instruction`s.
-        InvalidInstruction(script::Error),
-
-        /// The last instruction in the scriptsig was not an `OP_PUSHBYTES`.
-        NotPushBytes,
-    }
-
-    /// Error while reconstructing a leaf's scriptPubKey, returned by `process_proof`.
-    ///
-    /// This error is triggered if the input lacks the hashed data required by the
-    /// [ScriptPubKeyKind] (i.e., the public key for P2PKH, the redeem script for P2SH, or the
-    /// witness public key and witness script for P2WPKH/P2WSH).
-    #[derive(Debug)]
-    pub struct UtreexoLeafError {
-        pub leaf: CompactLeafData,
-        pub txid: Txid,
-        pub vin: usize,
-        pub kind: LeafErrorKind,
-    }
-
-    impl_error_from!(LeafErrorKind, script::Error, InvalidInstruction);
     impl_error_from!(BlockchainError, UtreexoLeafError, UtreexoLeaf);
-
-    impl Display for UtreexoLeafError {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            write!(
-                f,
-                "failed to reconstruct leaf {:?} for TxIn {}:{}: {:?}",
-                self.leaf, self.txid, self.vin, self.kind
-            )
-        }
-    }
 
     /// This function returns the scriptPubKey type (i.e. address type) of a given script data.
     /// It can be:
@@ -402,9 +368,9 @@ mod test {
     use super::proof_util::reconstruct_leaf_data;
     use super::CompactLeafData;
     use super::LeafData;
+    use super::LeafErrorKind;
     use super::ScriptPubKeyKind;
     use crate::proof_util::reconstruct_script_pubkey;
-    use crate::proof_util::LeafErrorKind;
 
     macro_rules! assert_recover_spk {
         (

@@ -149,7 +149,7 @@ impl<Chain> UtreexoNode<Chain, ChainSelector>
 where
     Chain: ChainBackend + 'static,
     WireError: From<Chain::Error>,
-    Chain::Error: From<proof_util::UtreexoLeafError>,
+    Chain::Error: From<floresta_domain::utreexo::UtreexoLeafError>,
 {
     /// This function is called every time we get a `Headers` message from a peer.
     /// It will validate the headers and add them to our chain, if they are valid.
