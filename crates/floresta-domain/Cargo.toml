@@ -24,6 +24,9 @@ sha2 = { workspace = true, features = ["std"] }
 # Local dependencies
 floresta-common = { workspace = true, features = ["std"] }
 
+[dev-dependencies]
+proptest = "1.6"
+
 [features]
 default = []
 

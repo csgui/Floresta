@@ -4,6 +4,9 @@ pub mod compact;
 pub mod error;
 pub mod leaf;
 
+#[cfg(test)]
+mod tests;
+
 pub use compact::CompactLeafData;
 pub use compact::ScriptPubKeyKind;
 pub use error::LeafErrorKind;
