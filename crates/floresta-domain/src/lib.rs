@@ -28,4 +28,5 @@
     html_favicon_url = "https://raw.githubusercontent.com/getfloresta/floresta-media/master/logo_png/Icon-Green(main).png"
 )]
 
+pub mod mempool;
 pub mod utreexo;

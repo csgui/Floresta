@@ -22,6 +22,7 @@ use bitcoin::TxMerkleNode;
 use bitcoin::Txid;
 use floresta_chain::pruned_utreexo::consensus::Consensus;
 use floresta_chain::BlockchainError;
+use floresta_domain::mempool::MempoolInterface;
 use tracing::debug;
 
 /// A short transaction id that we use to identify transactions in the mempool.
@@ -103,6 +104,20 @@ impl Display for AcceptToMempoolError {
 }
 
 impl Error for AcceptToMempoolError {}
+
+impl MempoolInterface for Mempool {
+    fn get_transaction(&self, txid: &Txid) -> Option<&Transaction> {
+        todo!()
+    }
+
+    fn list_transactions(&self) -> Vec<Txid> {
+        todo!()
+    }
+
+    fn get_stale(&mut self) -> Vec<Txid> {
+        todo!()
+    }
+}
 
 impl Mempool {
     /// Creates a new mempool with a given maximum size
