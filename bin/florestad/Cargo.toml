@@ -46,6 +46,10 @@ compact-filters = ["floresta-node/compact-filters"]
 zmq-server = ["floresta-node/zmq-server"]
 json-rpc = ["floresta-node/json-rpc", "compact-filters"]
 metrics = ["floresta-node/metrics"]
+# Dossel: the embedded Guile REPL. Off by default; requires the system GNU
+# Guile 3.0 development files at build time (`brew install guile`,
+# `apt install guile-3.0-dev`).
+dossel = ["floresta-node/dossel"]
 tokio-console = ["dep:console-subscriber"]
 
 [lints]

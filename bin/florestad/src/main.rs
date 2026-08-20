@@ -94,6 +94,12 @@ fn main() {
         tls_key_path: params.tls_key_path,
         allow_v1_fallback: params.allow_v1_fallback,
         backfill: !params.no_backfill,
+        #[cfg(feature = "dossel")]
+        dossel: params.dossel,
+        #[cfg(feature = "dossel")]
+        dossel_socket: params.dossel_socket,
+        #[cfg(feature = "dossel")]
+        dossel_init_file: params.load,
     };
 
     #[cfg(unix)]
@@ -112,12 +118,16 @@ fn main() {
     };
 
     // The guard must stay alive until the end of `main` to flush file logs when dropped.
-    let _logger_guard = start_logger(
+    let (_logger_guard, _log_reload) = start_logger(
         &config.datadir,
         config.log_to_file,
         config.log_to_stdout,
         log_level,
-    );
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("failed to start logger: {e}");
+        exit(1);
+    });
 
     let _rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

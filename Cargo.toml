@@ -15,6 +15,10 @@ members = [
     "crates/floresta-domain",
     "crates/floresta-metrics",
 
+    # Optional: requires the system GNU Guile 3.0 development files. Not in
+    # `default-members`, so a plain `cargo build` never needs Guile installed.
+    "crates/floresta-dossel",
+
     # Binaries
     "bin/florestad",
     "bin/floresta-cli",
@@ -87,6 +91,8 @@ floresta-wire = { path = "crates/floresta-wire" }
 floresta-mempool = { path = "crates/floresta-mempool" }
 floresta-domain = { path = "crates/floresta-domain" }
 floresta-metrics = { path = "crates/floresta-metrics" }
+floresta-dossel = { path = "crates/floresta-dossel" }
+metrics = { path = "metrics" }
 
 [workspace.lints.clippy]
 unused_async = "deny"

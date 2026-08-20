@@ -11,6 +11,10 @@
 //! 1. The `RUST_LOG` environment variable.
 //! 2. The `--debug` flag (`debug` level) or its absence (`info` level).
 //!
+//! The resulting filter is reloadable at runtime: [`start_logger`] returns a
+//! [`reload::Handle`], which the Dossel REPL exposes as the `log-level`
+//! config key.
+//!
 //! When the `tokio-console` feature is enabled, the registry also enables
 //! `tokio=trace` and `runtime=trace` so that `tokio-console` can connect,
 //! while the human-facing layers stay quiet through their own per-layer filters.
@@ -24,7 +28,6 @@ use std::process::exit;
 use tracing::Level;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
-use tracing_subscriber::Layer;
 use tracing_subscriber::fmt::FmtContext;
 use tracing_subscriber::fmt::FormatEvent;
 use tracing_subscriber::fmt::FormatFields;
@@ -34,6 +37,8 @@ use tracing_subscriber::fmt::time::ChronoLocal;
 use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::registry::Registry;
+use tracing_subscriber::reload;
 use tracing_subscriber::util::SubscriberInitExt;
 
 /// The file which logging events are written to.
@@ -232,10 +237,13 @@ where
 ///
 /// # Returns
 ///
-/// Returns `Ok(Some(guard))` when file logging is active. The [`WorkerGuard`]
-/// must be kept alive for the duration of the program; dropping it flushes and
-/// shuts down the non-blocking file-writer thread. Returns `Ok(None)` when file
-/// logging is disabled.
+/// On success, a pair of:
+///
+/// - `Option<WorkerGuard>` — `Some` when file logging is active. The guard
+///   must be kept alive for the duration of the program; dropping it flushes
+///   and shuts down the non-blocking file-writer thread.
+/// - A [`reload::Handle`] for the global [`EnvFilter`]. Reloading it changes
+///   the log level of every layer at runtime, e.g. from the Dossel REPL.
 ///
 /// # Errors
 ///
@@ -251,13 +259,18 @@ pub fn start_logger(
     log_to_file: bool,
     log_to_stdout: bool,
     log_level: Level,
-) -> Result<Option<WorkerGuard>, io::Error> {
+) -> Result<(Option<WorkerGuard>, reload::Handle<EnvFilter, Registry>), io::Error> {
     let datadir = datadir.as_ref();
 
     let is_debug = log_level >= Level::DEBUG;
-    let make_filter = || {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level.to_string()))
-    };
+
+    // One filter for the whole registry, reloadable at runtime (the Dossel
+    // REPL exposes it as the `log-level` config key). Both output layers saw
+    // identical per-layer filters before, so hoisting it here changes
+    // nothing for existing users.
+    let (filter, reload_handle) = reload::Layer::new(
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level.to_string())),
+    );
 
     // Formatter for events destined to `stdout`.
     let ansi_tty = io::IsTerminal::is_terminal(&io::stdout());
@@ -266,7 +279,6 @@ pub fn start_logger(
             .with_writer(io::stdout)
             .with_ansi(ansi_tty)
             .event_format(ShortTargetFormatter::new(is_debug))
-            .with_filter(make_filter())
     });
 
     if log_to_file {
@@ -296,13 +308,13 @@ pub fn start_logger(
             .with_writer(non_blocking)
             .with_ansi(false)
             .event_format(ShortTargetFormatter::new(is_debug))
-            .with_filter(make_filter())
     });
 
     tracing_subscriber::registry()
+        .with(filter)
         .with(fmt_layer_stdout)
         .with(fmt_layer_logfile)
         .init();
 
-    Ok(guard)
+    Ok((guard, reload_handle))
 }

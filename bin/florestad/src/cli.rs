@@ -190,6 +190,33 @@ pub struct Cli {
     /// This will run in the background and wont't affect node's operation. However,
     /// to disable backfilling, run floresta using this flag.
     pub no_backfill: bool,
+
+    #[cfg(feature = "dossel")]
+    #[arg(long, default_value_t = false)]
+    /// Start the Dossel REPL: an embedded Guile Scheme interpreter served over
+    /// a Unix socket.
+    ///
+    /// Connect with the `floresta-repl` script. The socket is created
+    /// owner-only, inside an owner-only directory, and no TCP port is ever
+    /// opened — but anything that can reach it can evaluate arbitrary code
+    /// inside the node process, so this is off unless you ask for it.
+    pub dossel: bool,
+
+    #[cfg(feature = "dossel")]
+    #[arg(long, value_name = "SOCKET")]
+    /// Where the Dossel REPL should listen. Defaults to `$DATA_DIR/repl.sock`.
+    ///
+    /// Unix socket paths have a short hard length limit (104 bytes on macOS,
+    /// 108 on Linux), so prefer somewhere shallow.
+    pub dossel_socket: Option<PathBuf>,
+
+    #[cfg(feature = "dossel")]
+    #[arg(long, value_name = "SCHEME_FILE")]
+    /// Load a Scheme file into the node's Guile environment at startup.
+    ///
+    /// Definitions made there survive across REPL sessions, so this is where
+    /// helper procedures you use often should live.
+    pub load: Option<PathBuf>,
 }
 
 impl Cli {

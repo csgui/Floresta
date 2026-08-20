@@ -203,7 +203,7 @@ impl<Blockchain: RpcChain> RpcImpl<Blockchain> {
     }
 }
 
-async fn handle_json_rpc_request(
+pub(crate) async fn handle_json_rpc_request(
     req: RpcRequest,
     state: Arc<RpcImpl<impl RpcChain>>,
 ) -> Result<Value> {
@@ -657,21 +657,43 @@ impl<Blockchain: RpcChain> RpcImpl<Blockchain> {
         })
     }
 
+    /// Build the RPC state without binding a listener.
+    ///
+    /// Kept separate from [`RpcImpl::serve`] so the same instance can back both
+    /// the HTTP server and other consumers in-process — Dossel's `(rpc-call …)`
+    /// dispatches through this state rather than opening a loopback connection
+    /// to our own port.
     #[allow(clippy::too_many_arguments)]
-    pub async fn create(
+    pub fn new(
         chain: Blockchain,
         wallet: Arc<AddressCache<KvDatabase>>,
         node: NodeHandle,
         kill_signal: Arc<RwLock<bool>>,
         network: Network,
         block_filter_storage: Option<Arc<NetworkFilters<FlatFiltersStore>>>,
-        address: Option<SocketAddr>,
         log_path: impl AsRef<Path>,
         user_agent: String,
         proxy: Option<SocketAddr>,
-    ) {
+    ) -> Self {
+        Self {
+            chain,
+            wallet,
+            node,
+            kill_signal,
+            network,
+            block_filter_storage,
+            inflight: Arc::new(RwLock::new(HashMap::new())),
+            log_path: log_path.as_ref().into(),
+            start_time: Instant::now(),
+            user_agent,
+            proxy,
+        }
+    }
+
+    /// Serve HTTP JSON-RPC on `address` until the process ends.
+    pub async fn serve(self: Arc<Self>, address: Option<SocketAddr>) {
         let address = address.unwrap_or_else(|| {
-            format!("127.0.0.1:{}", network.default_rpc_port())
+            format!("127.0.0.1:{}", self.network.default_rpc_port())
                 .parse()
                 .expect("hardcoded address is valid")
         });
@@ -699,24 +721,13 @@ impl<Blockchain: RpcChain> RpcImpl<Blockchain> {
                     .allow_private_network(true)
                     .allow_methods([Method::POST, Method::HEAD]),
             )
-            .with_state(Arc::new(Self {
-                chain,
-                wallet,
-                node,
-                kill_signal,
-                network,
-                block_filter_storage,
-                inflight: Arc::new(RwLock::new(HashMap::new())),
-                log_path: log_path.as_ref().into(),
-                start_time: Instant::now(),
-                user_agent,
-                proxy,
-            }));
+            .with_state(self);
 
         axum::serve(listener, router)
             .await
             .expect("failed to start rpc server");
     }
+
 }
 
 /// Converts a script to ASM (assembly) format, displaying the script's operations

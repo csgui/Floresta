@@ -8,6 +8,8 @@
 )]
 
 mod config_file;
+#[cfg(feature = "dossel")]
+mod dossel;
 mod error;
 mod florestad;
 #[cfg(feature = "json-rpc")]
@@ -20,3 +22,6 @@ pub use florestad::AssumeUtreexoValue;
 pub use florestad::AssumeValidArg;
 pub use florestad::Config;
 pub use florestad::Florestad;
+
+#[cfg(feature = "dossel")]
+pub use dossel::NodeExtensionApi;
