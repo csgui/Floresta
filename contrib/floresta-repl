@@ -1,0 +1,43 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Connect to a running florestad's Dossel REPL.
+#
+# Usage:
+#   floresta-repl [SOCKET]
+#
+# SOCKET defaults to $FLORESTA_REPL_SOCKET, then to ~/.floresta/repl.sock.
+#
+# Note on `guile --connect`: there is no such flag. Guile ships `--listen`, for
+# the *server* side, and no built-in client. Connecting to a REPL server is
+# plain "pipe a terminal at a Unix socket", so that is what this does, using
+# whichever of socat / rlwrap+nc / nc is installed. socat and rlwrap give line
+# editing and history; bare nc does not.
+
+set -eu
+
+SOCKET="${1:-${FLORESTA_REPL_SOCKET:-$HOME/.floresta/repl.sock}}"
+
+if [ ! -S "$SOCKET" ]; then
+    echo "floresta-repl: no REPL socket at $SOCKET" >&2
+    echo >&2
+    echo "Is florestad running with --dossel?" >&2
+    echo "If its data directory is elsewhere, pass the socket path:" >&2
+    echo "    floresta-repl /path/to/datadir/repl.sock" >&2
+    exit 1
+fi
+
+# socat is only useful here when built with readline support; some builds
+# (e.g. current Homebrew) ship it without, lacking the READLINE address type.
+if command -v socat > /dev/null 2>&1 && socat -hh 2>&1 | grep -qw READLINE; then
+    # History file is per-socket so multiple nodes do not share one.
+    exec socat "READLINE,history=${HOME}/.floresta_repl_history" "UNIX-CONNECT:${SOCKET}"
+elif command -v rlwrap > /dev/null 2>&1 && command -v nc > /dev/null 2>&1; then
+    exec rlwrap -H "${HOME}/.floresta_repl_history" nc -U "$SOCKET"
+elif command -v nc > /dev/null 2>&1; then
+    echo "floresta-repl: install socat or rlwrap for line editing and history" >&2
+    exec nc -U "$SOCKET"
+else
+    echo "floresta-repl: need one of socat, rlwrap, or nc to connect" >&2
+    exit 1
+fi

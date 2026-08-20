@@ -262,6 +262,25 @@ pub struct Config {
     #[cfg(feature = "zmq-server")]
     /// Whether the ZMQ server should be disabled
     pub disable_zmq: bool,
+
+    #[cfg(feature = "dossel")]
+    /// Whether to start the Dossel REPL.
+    ///
+    /// Dossel serves a Guile Scheme REPL on a Unix socket, giving an operator
+    /// live access to node state. Anything that can connect to that socket can
+    /// evaluate arbitrary code in this process, so it is off unless asked for.
+    pub dossel: bool,
+
+    #[cfg(feature = "dossel")]
+    /// Where the Dossel REPL should listen. Defaults to `{datadir}/repl.sock`.
+    pub dossel_socket: Option<PathBuf>,
+
+    #[cfg(feature = "dossel")]
+    /// A Scheme file to load into the node's Guile environment at startup.
+    ///
+    /// Definitions made there are visible to every REPL session, including ones
+    /// opened long afterwards.
+    pub dossel_init_file: Option<PathBuf>,
 }
 
 impl Config {
@@ -311,6 +330,12 @@ impl Config {
             disable_electrum: false,
             #[cfg(feature = "zmq-server")]
             disable_zmq: false,
+            #[cfg(feature = "dossel")]
+            dossel: false,
+            #[cfg(feature = "dossel")]
+            dossel_socket: None,
+            #[cfg(feature = "dossel")]
+            dossel_init_file: None,
         }
     }
 }
@@ -338,6 +363,14 @@ pub struct Florestad {
     /// Parsed config file, read once. Several getters consult it, and each
     /// read would otherwise re-parse and re-warn about a missing file.
     config_file: OnceLock<ConfigFile>,
+
+    #[cfg(feature = "dossel")]
+    /// A handle to the Dossel extension layer, if it was started.
+    ///
+    /// Held in an `Option` so [`Florestad::stop`] can take ownership and shut
+    /// it down; `DosselRuntime::shutdown` consumes the handle in order to join
+    /// the Guile thread.
+    dossel: Arc<Mutex<Option<floresta_dossel::DosselRuntime>>>,
 }
 
 impl Florestad {
@@ -348,6 +381,23 @@ impl Florestad {
     /// before flushing everything is equivalent to an unclean shutdown.
     pub async fn stop(&self) {
         info!("Stopping node...");
+
+        #[cfg(feature = "dossel")]
+        {
+            // Taken out of the mutex because shutting down consumes the handle.
+            // Done before the stop signal so that REPL sessions are closed
+            // while the node can still answer whatever they have in flight.
+            let runtime = self
+                .dossel
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+
+            if let Some(runtime) = runtime {
+                runtime.shutdown();
+            }
+        }
+
         let mut stop_signal = self.stop_signal.write().await;
         *stop_signal = true;
     }
@@ -642,28 +692,40 @@ impl Florestad {
 
             let credentials = Arc::new(json_rpc::auth::Auth::new(entries));
 
-            let server = tokio::spawn(json_rpc::server::RpcImpl::create(
+            let rpc = Arc::new(json_rpc::server::RpcImpl::new(
                 blockchain_state.clone(),
                 wallet.clone(),
                 chain_provider.get_handle(),
                 self.stop_signal.clone(),
                 self.config.network,
                 cfilters.clone(),
-                self.config
-                    .json_rpc_address
-                    .as_ref()
-                    .map(|x| Self::resolve_hostname(x, self.config.network.default_rpc_port()))
-                    .transpose()?,
                 self.config.log_file.clone().unwrap_or_default(),
                 self.config.user_agent.clone(),
                 proxy,
                 !self.config.allow_v1_fallback,
-                credentials,
             ));
+
+            let address = self
+                .config
+                .json_rpc_address
+                .as_ref()
+                .map(|x| Self::resolve_hostname(x, self.config.network.default_rpc_port()))
+                .transpose()?;
+
+            let server = tokio::spawn(Arc::clone(&rpc).serve(address, credentials));
 
             if self.json_rpc.set(server).is_err() {
                 core::panic!("We should be the first one setting this");
             }
+        };
+
+        // Dossel: the embedded Guile REPL.
+        //
+        // Started last among the in-process services and never allowed to fail
+        // node startup: if the REPL cannot come up, the node should still run.
+        #[cfg(feature = "dossel")]
+        if self.config.dossel {
+            self.start_dossel(blockchain_state.clone(), datadir);
         }
 
         // Electrum Server configuration.
@@ -809,6 +871,45 @@ impl Florestad {
 
         // All done, return Ok
         Ok(())
+    }
+
+    /// Start the Dossel extension layer.
+    ///
+    /// Failures are logged, never propagated: an operator convenience must not
+    /// be able to stop a node from serving blocks. The node runs perfectly well
+    /// without a REPL.
+    #[cfg(feature = "dossel")]
+    fn start_dossel(&self, chain: Arc<ChainState<ChainStore>>, datadir: &Path) {
+        use floresta_dossel::DosselConfig;
+        use floresta_dossel::DosselRuntime;
+
+        let socket_path = self
+            .config
+            .dossel_socket
+            .clone()
+            .unwrap_or_else(|| datadir.join("repl.sock"));
+
+        let config = DosselConfig {
+            socket_path,
+            init_file: self.config.dossel_init_file.clone(),
+        };
+
+        let api = crate::dossel::NodeExtensionApi::new(chain);
+
+        match DosselRuntime::spawn(config, Arc::new(api)) {
+            Ok(runtime) => {
+                warn!(
+                    "Dossel REPL is enabled. Anyone who can open {} can evaluate code inside \
+                     this process.",
+                    runtime.socket_path().display()
+                );
+
+                *self.dossel.lock().unwrap_or_else(|e| e.into_inner()) = Some(runtime);
+            }
+            Err(e) => {
+                error!("Could not start the Dossel REPL: {e}. The node will run without it.");
+            }
+        }
     }
 
     pub fn from_config(config: Config) -> Self {
@@ -1141,6 +1242,8 @@ impl From<Config> for Florestad {
             #[cfg(feature = "json-rpc")]
             cookie_path: OnceLock::new(),
             config_file: OnceLock::new(),
+            #[cfg(feature = "dossel")]
+            dossel: Arc::new(Mutex::new(None)),
         }
     }
 }

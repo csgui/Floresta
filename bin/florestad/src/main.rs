@@ -110,6 +110,12 @@ fn main() {
         disable_electrum: params.disable_electrum,
         #[cfg(feature = "zmq-server")]
         disable_zmq: params.disable_zmq,
+        #[cfg(feature = "dossel")]
+        dossel: params.dossel,
+        #[cfg(feature = "dossel")]
+        dossel_socket: params.dossel_socket,
+        #[cfg(feature = "dossel")]
+        dossel_init_file: params.load,
     };
 
     // Warned before forking, while stderr is still attached to the terminal.
@@ -139,7 +145,7 @@ fn main() {
     };
 
     // The guard must stay alive until the end of `main` to flush file logs when dropped.
-    let _logger_guard = start_logger(config.log_file.as_ref(), config.log_to_stdout, log_level)
+    let (_logger_guard, _log_reload) = start_logger(config.log_file.as_ref(), config.log_to_stdout, log_level)
         .unwrap_or_else(|e| {
             let path = config.log_file.as_deref().unwrap_or(Path::new(""));
             eprintln!("Could not open log file {}: {e}", path.display());

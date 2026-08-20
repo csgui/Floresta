@@ -12,6 +12,10 @@
 //! 1. The `RUST_LOG` environment variable.
 //! 2. The `--debug` flag (`debug` level) or its absence (`info` level).
 //!
+//! The resulting filter is reloadable at runtime: [`start_logger`] returns a
+//! [`reload::Handle`], which the Dossel REPL exposes as the `log-level`
+//! config key.
+//!
 //! When the `tokio-console` feature is enabled, the registry also enables
 //! `tokio=trace` and `runtime=trace` so that `tokio-console` can connect,
 //! while the human-facing layers stay quiet through their own per-layer filters.
@@ -35,6 +39,8 @@ use tracing_subscriber::fmt::layer;
 use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::registry::Registry;
+use tracing_subscriber::reload;
 use tracing_subscriber::util::SubscriberInitExt;
 
 /// The file which logging events are written to.
@@ -281,10 +287,14 @@ pub(crate) fn resolve_log_file(
 ///
 /// # Returns
 ///
-/// Returns `Ok(Some(guard))` when file logging is active. The [`WorkerGuard`]
-/// must be kept alive for the duration of the program; dropping it flushes and
-/// shuts down the non-blocking file-writer thread. Returns `Ok(None)` when file
-/// logging is disabled.
+/// On success, a pair of:
+///
+/// - `Option<WorkerGuard>` — `Some` when file logging is active. The guard
+///   must be kept alive for the duration of the program; dropping it flushes
+///   and shuts down the non-blocking file-writer thread.
+/// - A [`reload::Handle`] for the [`EnvFilter`] shared by the stdout and file
+///   layers. Reloading it changes their log level at runtime, e.g. from the
+///   Dossel REPL.
 ///
 /// # Errors
 ///
@@ -299,11 +309,17 @@ pub fn start_logger(
     log_file: Option<impl AsRef<Path>>,
     log_to_stdout: bool,
     log_level: Level,
-) -> Result<Option<WorkerGuard>, io::Error> {
+) -> Result<(Option<WorkerGuard>, reload::Handle<EnvFilter, Registry>), io::Error> {
     let is_debug = log_level >= Level::DEBUG;
-    let make_filter = || {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level.to_string()))
-    };
+
+    // One filter shared by the human-facing layers, reloadable at runtime (the
+    // Dossel REPL exposes it as the `log-level` config key). Both output layers
+    // saw identical per-layer filters before, so sharing one changes nothing for
+    // existing users. It stays a per-layer filter (not a global one) so the
+    // `tokio-console` layer still receives its `tokio=trace` events.
+    let (filter, reload_handle) = reload::Layer::new(
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level.to_string())),
+    );
 
     // Formatter for events destined to `stdout`.
     let ansi_tty = io::IsTerminal::is_terminal(&io::stdout());
@@ -312,7 +328,6 @@ pub fn start_logger(
             .with_writer(io::stdout)
             .with_ansi(ansi_tty)
             .event_format(ShortTargetFormatter::new(is_debug))
-            .with_filter(make_filter())
     });
 
     // Formatter for events destined to the log file.
@@ -332,15 +347,14 @@ pub fn start_logger(
                 layer()
                     .with_writer(non_blocking)
                     .with_ansi(false)
-                    .event_format(ShortTargetFormatter::new(is_debug))
-                    .with_filter(make_filter()),
+                    .event_format(ShortTargetFormatter::new(is_debug)),
             )
         }
     };
 
-    let registry = tracing_subscriber::registry()
-        .with(fmt_layer_stdout)
-        .with(fmt_layer_logfile);
+    // `Layer::and_then` spelled out, since `Option::and_then` would shadow it.
+    let human_layers = Layer::and_then(fmt_layer_stdout, fmt_layer_logfile).with_filter(filter);
+    let registry = tracing_subscriber::registry().with(human_layers);
 
     #[cfg(feature = "tokio-console")]
     // Spawns the tokio-console gRPC server on a dedicated background thread
@@ -349,7 +363,7 @@ pub fn start_logger(
 
     registry.init();
 
-    Ok(guard)
+    Ok((guard, reload_handle))
 }
 
 #[cfg(test)]

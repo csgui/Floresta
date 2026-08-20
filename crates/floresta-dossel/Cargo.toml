@@ -1,0 +1,27 @@
+[package]
+name = "floresta-dossel"
+version = "0.9.0"
+rust-version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true # Floresta/README.md
+authors = ["Floresta Developers <contact@getfloresta.org>"]
+description = "Dossel: a programmable runtime extension layer for Floresta, backed by embedded GNU Guile"
+links = "guile-3.0"
+
+[dependencies]
+# All dependencies MUST be pinned precisely with `X.Y.z`
+async-trait = { version = "=0.1.92" }
+libc = { version = "=0.2.186" }
+serde_json = { workspace = true }
+thiserror = { version = "=2.0.20" }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[build-dependencies]
+bindgen = { version = "=0.72.1" }
+cc = { version = "=1.4.2" }
+pkg-config = { version = "=0.3.33" }
+
+[lints]
+workspace = true
