@@ -13,6 +13,8 @@
 ;;; This file is embedded into florestad with `include_str!`, so there is
 ;;; nothing to install and no load path to configure.
 
+(use-modules (ice-9 format))
+
 (define (get-block-height)
   "Return the height of the current best chain tip, as an exact integer."
   (%get-block-height))
@@ -50,3 +52,37 @@ Raises an error if KEY is read-only, if VALUE is out of range, or if the key
 has no backing in this build. Consensus parameters are not configuration
 and do not appear here at all."
   (%set-config! key value))
+
+;;; ------------------------------------------------------------------
+;;; Help
+;;; ------------------------------------------------------------------
+
+(define (dossel-help)
+  "Print the procedures this build currently implements.
+
+This surface is grown one procedure at a time, not delivered up front — see
+`(rpc-call \"getdeploymentinfo\")`-style calls for anything not listed here;
+`rpc-call` reaches every JSON-RPC method florestad implements, whether or
+not there is a dedicated wrapper for it yet."
+  (format #t "~%Dossel - the Floresta node REPL~%~%")
+  (format #t "Chain~%")
+  (format #t "  (get-block-height)                     current tip height~%")
+  (format #t "    (get-block-height) => 320169~%~%")
+  (format #t "RPC passthrough~%")
+  (format #t "  (rpc-call method [params])              call any JSON-RPC method~%")
+  (format #t "    (rpc-call \"getblockcount\")~%")
+  (format #t "    (rpc-call \"getblockhash\" '(0))~%")
+  (format #t "    (rpc-call \"getpeerinfo\")~%~%")
+  (format #t "Configuration~%")
+  (format #t "  (get-config key)                        read a key~%")
+  (format #t "  (set-config! key value)                 write a key~%")
+  (format #t "    (get-config 'network) => regtest~%")
+  (format #t "    (set-config! 'log-level \"debug\")~%~%")
+  (format #t "REPL~%")
+  (format #t "  (clear)                                 clear the screen, replay the banner~%")
+  (format #t "  (quit)                                  end this session; the node keeps running~%~%")
+  (format #t "Any procedure's own documentation is available with ,d, e.g.~%")
+  (format #t "  ,d rpc-call~%~%")
+  (format #t "Sessions share the (guile-user) module, so a definition made in~%")
+  (format #t "one session is visible in every other one, including later ones.~%~%")
+  (values))
