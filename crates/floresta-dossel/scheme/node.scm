@@ -4,7 +4,7 @@
 ;;;
 ;;; The Rust side registers primitives named with a leading `%`. This file
 ;;; is where the procedures operators actually call belong, defined on top
-;;; of those primitives — argument checks, optional arguments, docstrings,
+;;; of those primitives -- argument checks, optional arguments, docstrings,
 ;;; help text.
 ;;;
 ;;; REPL presentation (colors, banner, prompt) lives in repl.scm instead,
@@ -60,7 +60,7 @@ and do not appear here at all."
 (define (dossel-help)
   "Print the procedures this build currently implements.
 
-This surface is grown one procedure at a time, not delivered up front — see
+This surface is grown one procedure at a time, not delivered up front -- see
 `(rpc-call \"getdeploymentinfo\")`-style calls for anything not listed here;
 `rpc-call` reaches every JSON-RPC method florestad implements, whether or
 not there is a dedicated wrapper for it yet."

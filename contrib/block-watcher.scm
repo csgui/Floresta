@@ -31,5 +31,5 @@
          (format #t "block-watcher died: ~a ~a~%" key args)))))
   'block-watcher-running)
 
-;; Start immediately — loading this file is what activates the watcher.
+;; Start immediately -- loading this file is what activates the watcher.
 (start-block-watcher! 3)
