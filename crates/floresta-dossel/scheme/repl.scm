@@ -1,16 +1,16 @@
 ;;; SPDX-License-Identifier: MIT OR Apache-2.0
 ;;;
 ;;; Dossel's REPL presentation: colors, the banner, the prompt, (clear).
-;;; This is session bootstrap, not a standard library — it sets up how a
+;;; This is session bootstrap, not a standard library -- it sets up how a
 ;;; connection looks, not reusable functions for other code to call. None
 ;;; of it depends on the `%` primitives, so it is evaluated before those
 ;;; are registered; see guile/module.rs.
 ;;;
 ;;; Floresta-specific procedures (get-block-height, list-peers, and the
 ;;; rest, wrapping those primitives) belong in node.scm instead, loaded
-;;; after this file. A genuine prelude.scm — reusable standard-library
+;;; after this file. A genuine prelude.scm -- reusable standard-library
 ;;; functions, generic to Dossel, available to that code and to anyone's
-;;; own --load scripts — doesn't exist yet.
+;;; own --load scripts -- doesn't exist yet.
 ;;;
 ;;; This file is embedded into florestad with `include_str!`, so there is
 ;;; nothing to install and no load path to configure.
@@ -19,22 +19,29 @@
 ;;; Silence Guile's version/copyright banner. Replacing it via `repl-welcome`
 ;;; doesn't work: (system repl repl) calls that name as a binding resolved
 ;;; within its own precompiled module, so runtime `set!` from here never
-;;; reaches it — verified empirically, not just assumed. The prompt
+;;; reaches it -- verified empirically, not just assumed. The prompt
 ;;; procedure below shows our own banner instead, since that IS a plain
 ;;; first-class procedure value Guile calls directly, with no cross-module
 ;;; indirection to fight.
-(%inhibit-welcome-message #t)
+;;;
+;;; Guarded with `defined?`: this variable's presence has been observed to
+;;; vary across Guile installs/versions. It is purely cosmetic, so a Guile
+;;; that lacks it should just keep its own banner, not take down the whole
+;;; REPL -- without this guard, an unbound-variable error here aborts
+;;; loading the (floresta node) module entirely and the REPL never starts.
+(when (defined? '%inhibit-welcome-message)
+  (%inhibit-welcome-message #t))
 ;;; ANSI color helpers. Plain escape bytes embedded in a displayed or
-;;; returned string — verified to survive Guile's REPL output path intact,
+;;; returned string -- verified to survive Guile's REPL output path intact,
 ;;; since the socket is a raw byte stream and nc/rlwrap/socat all pass
 ;;; escape sequences through untouched. Rendering is up to the client's
 ;;; terminal, same as any other program that colors its output.
 (define (ansi code) (string-append (string (integer->char 27)) "[" code "m"))
 (define ansi-reset (ansi "0"))
 (define ansi-bold  (ansi "1"))
-(define ansi-red   (ansi "31"))   ; (quit) — a plain alarm color is the point
+(define ansi-red   (ansi "31"))   ; (quit) -- a plain alarm color is the point
 ;;; Phosphor palette. 24-bit truecolor SGR sequences, so they go through the
-;;; same `ansi` helper as the basic codes above — the "38;2;r;g;b" form still
+;;; same `ansi` helper as the basic codes above -- the "38;2;r;g;b" form still
 ;;; terminates in the "m" that `ansi` appends, so no separate builder is
 ;;; needed. Greens evoke the canopy. If a client terminal lacks truecolor
 ;;; (check $COLORTERM for "truecolor"/"24bit"), swap these for their 256-color
@@ -49,7 +56,7 @@
 (define ansi-clear-screen
   (string-append (string (integer->char 27)) "[2J"
                   (string (integer->char 27)) "[H"))
-;;; Draw an ASCII box around the title — plain +, -, | so the frame renders
+;;; Draw an ASCII box around the title -- plain +, -, | so the frame renders
 ;;; identically on any terminal regardless of Unicode or locale support. The
 ;;; width padding is applied to the plain text BEFORE the color escapes are
 ;;; prepended, so the zero-width SGR bytes never enter string-length's count
