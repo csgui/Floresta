@@ -22,6 +22,7 @@ pub use florestad::AssumeUtreexoValue;
 pub use florestad::AssumeValidArg;
 pub use florestad::Config;
 pub use florestad::Florestad;
+pub use florestad::LogLevelControl;
 
 #[cfg(feature = "dossel")]
 pub use dossel::NodeExtensionApi;

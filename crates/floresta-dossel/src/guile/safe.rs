@@ -32,11 +32,11 @@
 //! # Minimal by design
 //!
 //! `Scm` exposes only the value shapes this crate's current primitives
-//! (`get-block-height`, `rpc-call`) and its own catch/throw machinery
-//! actually need — see `guile/module.rs`. Association lists (`alist`) and
-//! bignum-to-decimal fallback (`from_i128`) are not among them, since nothing
-//! currently produces those shapes; add them back when a primitive needs
-//! them, so every method here stays backed by a real caller.
+//! (`get-block-height`, `rpc-call`, `get-config`, `set-config!`) and its own
+//! catch/throw machinery actually need — see `guile/module.rs`. Association
+//! lists (`alist`) are not among them, since nothing currently produces that
+//! shape; add it back when a primitive needs it, so every method here stays
+//! backed by a real caller.
 
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -107,6 +107,18 @@ impl Scm {
     pub(crate) fn from_i64(n: i64) -> Self {
         // SAFETY: as `from_u32`.
         Self(unsafe { bindings::scm_from_int64(n) })
+    }
+
+    /// Convert an `i128` if it fits in an `i64`, else fall back to a decimal
+    /// string. Used by the config layer, whose values are held as `i128`.
+    pub(crate) fn from_i128(n: i128) -> Self {
+        match i64::try_from(n) {
+            Ok(n) => Self::from_i64(n),
+            // Out of `i64` range means a bignum. Rather than bind Guile's
+            // bignum constructors for a case the config keys cannot actually
+            // reach, hand back the decimal text.
+            Err(_) => Self::from_str_lossy(&n.to_string()),
+        }
     }
 
     pub(crate) fn from_f64(x: f64) -> Self {

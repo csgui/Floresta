@@ -242,6 +242,29 @@ pub struct Config {
     /// Definitions made there are visible to every REPL session, including ones
     /// opened long afterwards.
     pub dossel_init_file: Option<PathBuf>,
+
+    /// Runtime control over the log filter, supplied by the embedding binary.
+    ///
+    /// When Dossel is enabled this is bound to the `log-level` config key, so
+    /// `(set-config! 'log-level "debug")` takes effect without a restart.
+    pub log_level_control: Option<LogLevelControl>,
+}
+
+/// Renders the active log filter, e.g. `"info,wire=debug"`.
+pub type LogLevelGetter = Arc<dyn Fn() -> String + Send + Sync>;
+
+/// Replaces the active log filter; the `Err` string explains a bad directive.
+pub type LogLevelSetter = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+
+/// Runtime control over the log filter, supplied by the embedding binary.
+///
+/// Kept as closures so this crate stays agnostic of the logging backend:
+/// `get` renders the active filter (e.g. `"info,wire=debug"`), `set`
+/// replaces it and returns an error string if the directive is invalid.
+#[derive(Clone)]
+pub struct LogLevelControl {
+    pub get: LogLevelGetter,
+    pub set: LogLevelSetter,
 }
 
 impl Config {
@@ -282,6 +305,7 @@ impl Config {
             dossel_socket: None,
             #[cfg(feature = "dossel")]
             dossel_init_file: None,
+            log_level_control: None,
         }
     }
 }
@@ -555,6 +579,7 @@ impl Florestad {
         if self.config.dossel {
             self.start_dossel(
                 blockchain_state.clone(),
+                chain_provider.get_handle(),
                 datadir,
                 #[cfg(feature = "json-rpc")]
                 Arc::clone(&rpc_impl),
@@ -713,6 +738,7 @@ impl Florestad {
     fn start_dossel(
         &self,
         chain: Arc<ChainState<ChainStore>>,
+        node: floresta_wire::node_handle::NodeHandle,
         datadir: &Path,
         #[cfg(feature = "json-rpc")] rpc: Arc<json_rpc::server::RpcImpl<Arc<ChainState<ChainStore>>>>,
     ) {
@@ -730,12 +756,19 @@ impl Florestad {
             init_file: self.config.dossel_init_file.clone(),
         };
 
+        let runtime_config = crate::dossel::runtime_config(
+            node.clone(),
+            self.config.network,
+            datadir.to_path_buf(),
+            self.config.log_level_control.clone(),
+        );
+
         #[cfg(feature = "json-rpc")]
         let api = crate::dossel::NodeExtensionApi::new(chain, rpc);
         #[cfg(not(feature = "json-rpc"))]
         let api = crate::dossel::NodeExtensionApi::new(chain);
 
-        match DosselRuntime::spawn(config, Arc::new(api)) {
+        match DosselRuntime::spawn(config, Arc::new(api), runtime_config) {
             Ok(runtime) => {
                 warn!(
                     "Dossel REPL is enabled. Anyone who can open {} can evaluate code inside \

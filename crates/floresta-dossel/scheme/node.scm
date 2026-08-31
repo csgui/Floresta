@@ -31,3 +31,22 @@ and null as the symbol 'null.
   (rpc-call \"getblockcount\")
   (rpc-call \"getblockhash\" '(0))"
   (%rpc-call method params))
+
+;;; ------------------------------------------------------------------
+;;; Configuration
+;;; ------------------------------------------------------------------
+
+(define (get-config key)
+  "Return the value of the configuration KEY, a symbol.
+
+Reading a key that has no backing in this build raises an error explaining
+why."
+  (%get-config key))
+
+(define (set-config! key value)
+  "Set the configuration KEY to VALUE, returning 'ok.
+
+Raises an error if KEY is read-only, if VALUE is out of range, or if the key
+has no backing in this build. Consensus parameters are not configuration
+and do not appear here at all."
+  (%set-config! key value))

@@ -10,20 +10,24 @@
 //! $ floresta-repl
 //! dossel> (get-block-height)
 //! $1 = 840443
+//! dossel> (get-config 'network)
+//! $2 = regtest
 //! dossel> (quit)
 //! ; session ends, node keeps running
 //! ```
 //!
-//! This is a minimal, deliberately small starting point — one procedure,
-//! rebuilt from a from-scratch redesign — not a fixed API surface. New
-//! capabilities get added to [`api::FlorestaExtensionApi`] and `node.scm` one
-//! at a time, as they are actually needed.
+//! This surface is grown one procedure at a time from a from-scratch
+//! redesign, not delivered as a fixed API up front: `get-block-height`,
+//! `rpc-call`, `get-config` and `set-config!` so far. New capabilities get
+//! added to [`api::FlorestaExtensionApi`] and `node.scm` as they are actually
+//! needed.
 //!
 //! ## Structure
 //!
 //! * [`api`] — [`FlorestaExtensionApi`], the trait the embedder implements.
 //!   Dossel depends on no other Floresta crate, so the whole FFI layer is
 //!   testable against a mock.
+//! * [`config`] — the closed set of runtime configuration keys.
 //! * [`guile`] — the interpreter: raw bindings, safe wrappers, the
 //!   `(floresta node)` module, the async bridge, the REPL server and the thread
 //!   that owns them.
@@ -48,10 +52,28 @@
 //!
 //! Block validation, difficulty adjustment and signature verification have no
 //! representation in this crate — not as writable state, not as readable state,
-//! not indirectly. [`FlorestaExtensionApi`] is the complete surface, and none of
-//! its methods touch consensus.
+//! not indirectly through `rpc-call` or `set-config!`. [`FlorestaExtensionApi`]
+//! and [`config::ConfigKey`] are the complete surface, and none of it touches
+//! consensus.
+//!
+//! ## What this build cannot do
+//!
+//! [`config::ConfigKey`]'s list is fixed regardless of build, so that
+//! `(get-config …)`/`(set-config! …)`'s set of valid keys never varies —
+//! three of them are not bound to anything by `florestad` today, and say so
+//! rather than accepting a write that does nothing:
+//!
+//! | Key | Why it is unavailable |
+//! |---|---|
+//! | `(set-config! 'max-peers …)` | the peer limit is `NodeContext::MAX_OUTGOING_PEERS`, an associated const fixed at compile time |
+//! | `(set-config! 'mempool-max-size-mb …)` | fixed when the node task builds its mempool |
+//! | `(set-config! 'fee-filter-rate …)` | Floresta has no fee filter rate |
+//!
+//! Each becomes available the moment an embedder binds a
+//! [`config::ConfigBackend`] for it. No change to the Scheme layer is needed.
 
 pub mod api;
+pub mod config;
 pub mod error;
 mod guile;
 pub mod testing;
@@ -61,6 +83,9 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 
 pub use crate::api::FlorestaExtensionApi;
+pub use crate::config::ConfigKey;
+pub use crate::config::ConfigValue;
+pub use crate::config::RuntimeConfig;
 pub use crate::error::ApiError;
 pub use crate::error::ApiResult;
 pub use crate::error::DosselError;
@@ -83,10 +108,14 @@ impl DosselRuntime {
     /// path cannot be prepared. Failures *after* the thread starts — a socket
     /// that will not bind, a broken init file — are logged by the Guile thread
     /// instead, so that nothing Dossel does can abort node startup.
-    pub fn spawn(config: DosselConfig, api: Arc<dyn FlorestaExtensionApi>) -> Result<Self, DosselError> {
+    pub fn spawn(
+        config: DosselConfig,
+        api: Arc<dyn FlorestaExtensionApi>,
+        runtime_config: RuntimeConfig,
+    ) -> Result<Self, DosselError> {
         let handle = Handle::try_current().map_err(|_| DosselError::NoTokioRuntime)?;
 
-        if !guile::bridge::attach(api, handle) {
+        if !guile::bridge::attach(api, handle, runtime_config) {
             tracing::warn!(
                 "Dossel is already attached to a node in this process; \
                  keeping the existing attachment"
