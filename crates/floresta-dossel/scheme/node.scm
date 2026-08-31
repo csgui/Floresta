@@ -16,3 +16,18 @@
 (define (get-block-height)
   "Return the height of the current best chain tip, as an exact integer."
   (%get-block-height))
+
+;;; ------------------------------------------------------------------
+;;; Generic RPC passthrough
+;;; ------------------------------------------------------------------
+
+(define* (rpc-call method #:optional (params '()))
+  "Call the JSON-RPC method METHOD with PARAMS and return the parsed result.
+
+METHOD is a string or symbol. PARAMS is a list, defaulting to the empty list.
+JSON objects come back as association lists with symbol keys, arrays as lists,
+and null as the symbol 'null.
+
+  (rpc-call \"getblockcount\")
+  (rpc-call \"getblockhash\" '(0))"
+  (%rpc-call method params))

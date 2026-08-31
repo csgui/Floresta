@@ -13,9 +13,9 @@
 //!
 //! # Current surface
 //!
-//! The primitive surface is deliberately minimal right now: just
-//! `get-block-height`, rebuilt from a from-scratch redesign (see
-//! `guile/module.rs`). These tests cover that procedure plus the REPL
+//! The primitive surface is deliberately minimal and grown one procedure at a
+//! time from a from-scratch redesign (see `guile/module.rs`): `get-block-height`
+//! and `rpc-call` so far. These tests cover exactly that, plus the REPL
 //! mechanics themselves — session independence, error resilience, socket
 //! permissions — not a wide API surface, because there isn't one yet.
 
@@ -232,6 +232,18 @@ fn sessions_are_independent() {
     // Quitting one leaves the other working (acceptance criterion 4).
     drop(second);
     assert!(first.eval("(get-block-height)").contains("840443"));
+}
+
+#[test]
+fn rpc_passthrough_round_trips_json() {
+    let mut s = Session::open();
+
+    let out = s.eval(r#"(assq-ref (rpc-call "getblockcount") 'method)"#);
+    assert!(out.contains("getblockcount"), "got {out}");
+
+    // A JSON array comes back as a Scheme list.
+    let params = s.eval(r#"(assq-ref (rpc-call "getblockhash" '(7)) 'params)"#);
+    assert!(params.contains('7'), "got {params}");
 }
 
 #[test]

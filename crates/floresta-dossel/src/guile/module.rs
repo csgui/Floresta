@@ -5,7 +5,7 @@
 //! # Shape
 //!
 //! Rust registers *primitives* under names prefixed with `%`. The user-facing
-//! procedures — currently just `get-block-height` — are defined in Scheme, in
+//! procedures — `get-block-height`, `rpc-call` — are defined in Scheme, in
 //! `scheme/node.scm`, on top of those primitives.
 //!
 //! That split is deliberate. Argument checking and docstrings are far cleaner
@@ -35,6 +35,7 @@ use super::bindings;
 use super::bridge;
 use super::safe;
 use super::safe::Scm;
+use crate::error::ApiError;
 use crate::error::ApiResult;
 
 /// REPL presentation: colors, banner, prompt. No dependency on the `%`
@@ -98,6 +99,73 @@ fn panic_text(payload: &Box<dyn std::any::Any + Send>) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Result conversion
+// ---------------------------------------------------------------------------
+
+/// Convert a JSON value into Scheme.
+///
+/// Objects become association lists with symbol keys, so `assoc-ref` works on
+/// them the same way it would on any other record. `null` becomes the symbol
+/// `'null` rather than `#f`, which would be indistinguishable from a JSON
+/// `false`.
+fn json_to_scm(value: &serde_json::Value) -> Scm {
+    match value {
+        serde_json::Value::Null => Scm::symbol("null"),
+        serde_json::Value::Bool(b) => Scm::from_bool(*b),
+        serde_json::Value::Number(n) => n.as_i64().map_or_else(
+            || {
+                n.as_u64().map_or_else(
+                    || Scm::from_f64(n.as_f64().unwrap_or(f64::NAN)),
+                    Scm::from_u64,
+                )
+            },
+            Scm::from_i64,
+        ),
+        serde_json::Value::String(s) => Scm::from_str_lossy(s),
+        serde_json::Value::Array(items) => {
+            Scm::list(items.iter().map(json_to_scm).collect::<Vec<_>>())
+        }
+        serde_json::Value::Object(map) => map
+            .iter()
+            .rev()
+            .fold(Scm::eol(), |tail, (key, value)| {
+                Scm::acons(Scm::symbol(key), json_to_scm(value), tail)
+            }),
+    }
+}
+
+/// Convert a Scheme value into JSON, for `rpc-call` parameters.
+///
+/// Symbols become strings, which is what an RPC method expects when a user
+/// types `'verbose` rather than `"verbose"`.
+fn scm_to_json(value: Scm) -> serde_json::Value {
+    if let Some(n) = value.as_i64() {
+        return serde_json::Value::from(n);
+    }
+    if let Some(s) = value.as_string() {
+        return serde_json::Value::String(s);
+    }
+    if let Some(s) = value.as_symbol_name() {
+        return serde_json::Value::String(s);
+    }
+    if value.is_real() {
+        if let Some(x) = value.as_f64() {
+            return serde_json::Number::from_f64(x)
+                .map_or(serde_json::Value::Null, serde_json::Value::Number);
+        }
+    }
+    if value.is_pair() || value.is_null() {
+        return serde_json::Value::Array(
+            value.list_to_vec().into_iter().map(scm_to_json).collect(),
+        );
+    }
+
+    // Anything left is treated as a boolean, which is how Scheme itself reads
+    // an arbitrary value in a conditional: only `#f` is false.
+    serde_json::Value::Bool(value.is_true())
+}
+
+// ---------------------------------------------------------------------------
 // Primitives
 // ---------------------------------------------------------------------------
 //
@@ -107,6 +175,37 @@ fn panic_text(payload: &Box<dyn std::any::Any + Send>) -> String {
 unsafe extern "C" fn p_get_block_height() -> bindings::SCM {
     guard("%get-block-height", || {
         bridge::call(|api| api.get_block_height()).map(Scm::from_u32)
+    })
+}
+
+unsafe extern "C" fn p_rpc_call(method: bindings::SCM, params: bindings::SCM) -> bindings::SCM {
+    guard("%rpc-call", || {
+        let method_scm = Scm::from_raw(method);
+        let method = method_scm
+            .as_string()
+            .or_else(|| method_scm.as_symbol_name())
+            .ok_or_else(|| {
+                ApiError::InvalidArgument(format!(
+                    "method must be a string or symbol, got {}",
+                    safe::write_to_string(method_scm)
+                ))
+            })?;
+
+        let params_scm = Scm::from_raw(params);
+        // `'()` is the natural way to write "no parameters", and it is neither
+        // undefined nor a pair, so it needs its own arm.
+        let params = if params_scm.is_undefined() || params_scm.is_null() {
+            Vec::new()
+        } else if params_scm.is_pair() {
+            params_scm.list_to_vec().into_iter().map(scm_to_json).collect()
+        } else {
+            return Err(ApiError::InvalidArgument(format!(
+                "params must be a list, got {}",
+                safe::write_to_string(params_scm)
+            )));
+        };
+
+        bridge::call(|api| api.rpc_call(&method, params)).map(|v| json_to_scm(&v))
     })
 }
 
@@ -150,6 +249,7 @@ macro_rules! register_subrs {
 fn register_primitives() {
     register_subrs! {
         "%get-block-height" => (0, 0, 0, p_get_block_height),
+        "%rpc-call"         => (1, 1, 0, p_rpc_call),
     }
 }
 

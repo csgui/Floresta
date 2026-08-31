@@ -22,4 +22,11 @@ use crate::error::ApiResult;
 pub trait FlorestaExtensionApi: Send + Sync + 'static {
     /// Height of the current best chain tip.
     async fn get_block_height(&self) -> ApiResult<u32>;
+
+    /// Invoke a JSON-RPC method by name and return the parsed result.
+    async fn rpc_call(
+        &self,
+        method: &str,
+        params: Vec<serde_json::Value>,
+    ) -> ApiResult<serde_json::Value>;
 }

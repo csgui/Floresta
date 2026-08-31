@@ -32,4 +32,12 @@ impl FlorestaExtensionApi for MockApi {
     async fn get_block_height(&self) -> ApiResult<u32> {
         Ok(self.height)
     }
+
+    async fn rpc_call(
+        &self,
+        method: &str,
+        params: Vec<serde_json::Value>,
+    ) -> ApiResult<serde_json::Value> {
+        Ok(serde_json::json!({ "method": method, "params": params }))
+    }
 }

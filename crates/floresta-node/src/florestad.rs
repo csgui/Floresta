@@ -593,105 +593,15 @@ impl Florestad {
         let wallet = Arc::new(wallet);
 
         // JSON-RPC
+        //
+        // Built as a shared `Arc` rather than spawned directly, so Dossel's
+        // `(rpc-call ...)` can dispatch against the same state instead of
+        // opening a loopback HTTP connection to our own port.
         #[cfg(feature = "json-rpc")]
-        if !self.config.disable_rpc {
-            if self.cookie_auth_disabled() {
-                if let Some(path) = self.config.rpc_cookie_file.clone() {
-                    return Err(FlorestadError::ConflictingCookieFlags(path));
-                }
-            }
-
-            // Parsed before the cookie is written, so a malformed entry cannot
-            // leave a credential on disk for a node that never starts.
-            let mut rpcauth: Vec<json_rpc::auth::RpcAuth> = Vec::new();
-            for line in self.get_rpc_auth() {
-                match json_rpc::auth::RpcAuth::parse(&line) {
-                    Ok(entry) => rpcauth.push(entry),
-                    Err(e) => {
-                        error!("{e}");
-                        // The variant names the defect without echoing the
-                        // line, which may hold a plaintext password.
-                        debug!("rpcauth parse failure: {e:?}");
-                        return Err(FlorestadError::InvalidRpcAuth);
-                    }
-                }
-            }
-            let rpcauth_entries = rpcauth.len();
-
-            let mut entries: Vec<json_rpc::auth::RpcAuth> = Vec::new();
-
-            if let Some(pass) = self.get_rpc_password() {
-                let user = self.get_rpc_user().unwrap_or_default();
-                // The Basic header parse is ASCII-only, so these would 401
-                // every request while looking configured.
-                if !user.is_ascii() {
-                    return Err(FlorestadError::NonAsciiCredential("--rpc-user"));
-                }
-                if !pass.is_ascii() {
-                    return Err(FlorestadError::NonAsciiCredential("--rpc-password"));
-                }
-                // The header splits on the first `:`, so a colon here never matches.
-                if user.contains(':') {
-                    return Err(FlorestadError::ColonInRpcUser(user));
-                }
-                info!("RPC password auth configured for user '{user}'");
-                entries.push(json_rpc::auth::RpcAuth::from_password(&user, &pass));
-            } else {
-                if self.get_rpc_user().is_some() {
-                    // There is no cookie to fall back to when it is disabled.
-                    if self.cookie_auth_disabled() {
-                        warn!(
-                            "--rpc-user is set but --rpc-password is not, and cookie auth is disabled"
-                        );
-                    } else {
-                        warn!(
-                            "--rpc-user is set but --rpc-password is not; falling back to cookie auth"
-                        );
-                    }
-                }
-                if !self.cookie_auth_disabled() {
-                    let configured_cookie_file = self.get_rpc_cookie_file();
-                    // Shared with floresta-cli so both resolve identically.
-                    let cookie_path = floresta_rpc::resolve_cookie_path(
-                        datadir,
-                        configured_cookie_file.as_deref(),
-                    );
-                    // Only for a path the operator chose: a stale cookie at the default one
-                    // is routine.
-                    if configured_cookie_file.is_some() && cookie_path.exists() {
-                        warn!(
-                            "replacing the existing file at {}; it will be removed on shutdown",
-                            cookie_path.display()
-                        );
-                    }
-                    let (cookie_user, cookie_pass) = json_rpc::auth::generate_cookie(&cookie_path)
-                        .map_err(|e| FlorestadError::CouldNotWriteFile(cookie_path.clone(), e))?;
-                    info!("RPC cookie file written to {}", cookie_path.display());
-                    // Recorded after a successful write, so shutdown deletes only ours.
-                    let _ = self.cookie_path.set(cookie_path);
-                    entries.push(json_rpc::auth::RpcAuth::from_password(
-                        &cookie_user,
-                        &cookie_pass,
-                    ));
-                }
-            }
-
-            // Appended after the cookie/password entry so first match still wins.
-            entries.extend(rpcauth);
-
-            if entries.is_empty() {
-                return Err(FlorestadError::NoAuthConfigured(
-                    "cookie auth disabled, no -rpcuser/-rpcpassword or -rpcauth entries"
-                        .to_string(),
-                ));
-            }
-
-            if rpcauth_entries > 0 {
-                info!("RPC: {rpcauth_entries} rpcauth entries loaded");
-            }
-
-            let credentials = Arc::new(json_rpc::auth::Auth::new(entries));
-
+        // Only Dossel reads this binding back; without that feature the `Arc`
+        // is still needed to build and serve, it just has no second consumer.
+        #[cfg_attr(not(feature = "dossel"), allow(unused_variables))]
+        let rpc_impl = {
             let rpc = Arc::new(json_rpc::server::RpcImpl::new(
                 blockchain_state.clone(),
                 wallet.clone(),
@@ -705,18 +615,123 @@ impl Florestad {
                 !self.config.allow_v1_fallback,
             ));
 
-            let address = self
-                .config
-                .json_rpc_address
-                .as_ref()
-                .map(|x| Self::resolve_hostname(x, self.config.network.default_rpc_port()))
-                .transpose()?;
+            // `--disable-rpc` only skips the HTTP listener: the state above is
+            // side-effect free, and Dossel's `(rpc-call ...)` still uses it.
+            if !self.config.disable_rpc {
+                if self.cookie_auth_disabled() {
+                    if let Some(path) = self.config.rpc_cookie_file.clone() {
+                        return Err(FlorestadError::ConflictingCookieFlags(path));
+                    }
+                }
 
-            let server = tokio::spawn(Arc::clone(&rpc).serve(address, credentials));
+                // Parsed before the cookie is written, so a malformed entry cannot
+                // leave a credential on disk for a node that never starts.
+                let mut rpcauth: Vec<json_rpc::auth::RpcAuth> = Vec::new();
+                for line in self.get_rpc_auth() {
+                    match json_rpc::auth::RpcAuth::parse(&line) {
+                        Ok(entry) => rpcauth.push(entry),
+                        Err(e) => {
+                            error!("{e}");
+                            // The variant names the defect without echoing the
+                            // line, which may hold a plaintext password.
+                            debug!("rpcauth parse failure: {e:?}");
+                            return Err(FlorestadError::InvalidRpcAuth);
+                        }
+                    }
+                }
+                let rpcauth_entries = rpcauth.len();
 
-            if self.json_rpc.set(server).is_err() {
-                core::panic!("We should be the first one setting this");
+                let mut entries: Vec<json_rpc::auth::RpcAuth> = Vec::new();
+
+                if let Some(pass) = self.get_rpc_password() {
+                    let user = self.get_rpc_user().unwrap_or_default();
+                    // The Basic header parse is ASCII-only, so these would 401
+                    // every request while looking configured.
+                    if !user.is_ascii() {
+                        return Err(FlorestadError::NonAsciiCredential("--rpc-user"));
+                    }
+                    if !pass.is_ascii() {
+                        return Err(FlorestadError::NonAsciiCredential("--rpc-password"));
+                    }
+                    // The header splits on the first `:`, so a colon here never matches.
+                    if user.contains(':') {
+                        return Err(FlorestadError::ColonInRpcUser(user));
+                    }
+                    info!("RPC password auth configured for user '{user}'");
+                    entries.push(json_rpc::auth::RpcAuth::from_password(&user, &pass));
+                } else {
+                    if self.get_rpc_user().is_some() {
+                        // There is no cookie to fall back to when it is disabled.
+                        if self.cookie_auth_disabled() {
+                            warn!(
+                                "--rpc-user is set but --rpc-password is not, and cookie auth is disabled"
+                            );
+                        } else {
+                            warn!(
+                                "--rpc-user is set but --rpc-password is not; falling back to cookie auth"
+                            );
+                        }
+                    }
+                    if !self.cookie_auth_disabled() {
+                        let configured_cookie_file = self.get_rpc_cookie_file();
+                        // Shared with floresta-cli so both resolve identically.
+                        let cookie_path = floresta_rpc::resolve_cookie_path(
+                            datadir,
+                            configured_cookie_file.as_deref(),
+                        );
+                        // Only for a path the operator chose: a stale cookie at the default one
+                        // is routine.
+                        if configured_cookie_file.is_some() && cookie_path.exists() {
+                            warn!(
+                                "replacing the existing file at {}; it will be removed on shutdown",
+                                cookie_path.display()
+                            );
+                        }
+                        let (cookie_user, cookie_pass) =
+                            json_rpc::auth::generate_cookie(&cookie_path).map_err(|e| {
+                                FlorestadError::CouldNotWriteFile(cookie_path.clone(), e)
+                            })?;
+                        info!("RPC cookie file written to {}", cookie_path.display());
+                        // Recorded after a successful write, so shutdown deletes only ours.
+                        let _ = self.cookie_path.set(cookie_path);
+                        entries.push(json_rpc::auth::RpcAuth::from_password(
+                            &cookie_user,
+                            &cookie_pass,
+                        ));
+                    }
+                }
+
+                // Appended after the cookie/password entry so first match still wins.
+                entries.extend(rpcauth);
+
+                if entries.is_empty() {
+                    return Err(FlorestadError::NoAuthConfigured(
+                        "cookie auth disabled, no -rpcuser/-rpcpassword or -rpcauth entries"
+                            .to_string(),
+                    ));
+                }
+
+                if rpcauth_entries > 0 {
+                    info!("RPC: {rpcauth_entries} rpcauth entries loaded");
+                }
+
+                let credentials = Arc::new(json_rpc::auth::Auth::new(entries));
+
+                let address = self
+                    .config
+                    .json_rpc_address
+                    .as_ref()
+                    .map(|x| Self::resolve_hostname(x, self.config.network.default_rpc_port()))
+                    .transpose()?;
+
+                let server = tokio::spawn(Arc::clone(&rpc).serve(address, credentials));
+
+                if self.json_rpc.set(server).is_err() {
+                    core::panic!("We should be the first one setting this");
+                }
             }
+
+            rpc
         };
 
         // Dossel: the embedded Guile REPL.
@@ -725,7 +740,12 @@ impl Florestad {
         // node startup: if the REPL cannot come up, the node should still run.
         #[cfg(feature = "dossel")]
         if self.config.dossel {
-            self.start_dossel(blockchain_state.clone(), datadir);
+            self.start_dossel(
+                blockchain_state.clone(),
+                datadir,
+                #[cfg(feature = "json-rpc")]
+                Arc::clone(&rpc_impl),
+            );
         }
 
         // Electrum Server configuration.
@@ -879,7 +899,12 @@ impl Florestad {
     /// be able to stop a node from serving blocks. The node runs perfectly well
     /// without a REPL.
     #[cfg(feature = "dossel")]
-    fn start_dossel(&self, chain: Arc<ChainState<ChainStore>>, datadir: &Path) {
+    fn start_dossel(
+        &self,
+        chain: Arc<ChainState<ChainStore>>,
+        datadir: &Path,
+        #[cfg(feature = "json-rpc")] rpc: Arc<json_rpc::server::RpcImpl<Arc<ChainState<ChainStore>>>>,
+    ) {
         use floresta_dossel::DosselConfig;
         use floresta_dossel::DosselRuntime;
 
@@ -894,6 +919,9 @@ impl Florestad {
             init_file: self.config.dossel_init_file.clone(),
         };
 
+        #[cfg(feature = "json-rpc")]
+        let api = crate::dossel::NodeExtensionApi::new(chain, rpc);
+        #[cfg(not(feature = "json-rpc"))]
         let api = crate::dossel::NodeExtensionApi::new(chain);
 
         match DosselRuntime::spawn(config, Arc::new(api)) {
