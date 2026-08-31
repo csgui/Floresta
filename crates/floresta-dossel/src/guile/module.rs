@@ -5,8 +5,8 @@
 //! # Shape
 //!
 //! Rust registers *primitives* under names prefixed with `%`. The user-facing
-//! procedures — `get-block-height`, `rpc-call` — are defined in Scheme, in
-//! `scheme/node.scm`, on top of those primitives.
+//! procedures — `get-block-height`, `rpc-call`, `get-config`, `set-config!` —
+//! are defined in Scheme, in `scheme/node.scm`, on top of those primitives.
 //!
 //! That split is deliberate. Argument checking and docstrings are far cleaner
 //! to express in Scheme than in `extern "C"` functions, and every line
@@ -35,6 +35,8 @@ use super::bindings;
 use super::bridge;
 use super::safe;
 use super::safe::Scm;
+use crate::config::ConfigKey;
+use crate::config::ConfigValue;
 use crate::error::ApiError;
 use crate::error::ApiResult;
 
@@ -99,8 +101,69 @@ fn panic_text(payload: &Box<dyn std::any::Any + Send>) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Argument extraction
+// ---------------------------------------------------------------------------
+
+/// Read a configuration key argument, accepting a symbol or a string.
+fn arg_config_key(value: Scm) -> ApiResult<ConfigKey> {
+    let name = value
+        .as_symbol_name()
+        .or_else(|| value.as_string())
+        .ok_or_else(|| {
+            ApiError::InvalidArgument(format!(
+                "config key must be a symbol, got {}",
+                safe::write_to_string(value)
+            ))
+        })?;
+
+    ConfigKey::from_symbol(&name).ok_or_else(|| {
+        let known = ConfigKey::ALL
+            .iter()
+            .map(|k| k.as_symbol())
+            .collect::<Vec<_>>()
+            .join(", ");
+        ApiError::NotFound(format!("unknown config key '{name}; known keys are {known}"))
+    })
+}
+
+/// Convert an arbitrary Scheme value into a [`ConfigValue`].
+fn arg_config_value(value: Scm) -> ApiResult<ConfigValue> {
+    if let Some(n) = value.as_i64() {
+        return Ok(ConfigValue::Integer(i128::from(n)));
+    }
+    if let Some(s) = value.as_symbol_name() {
+        return Ok(ConfigValue::Symbol(s));
+    }
+    if let Some(s) = value.as_string() {
+        return Ok(ConfigValue::Str(s));
+    }
+    if value.is_real() {
+        if let Some(x) = value.as_f64() {
+            return Ok(ConfigValue::Real(x));
+        }
+    }
+
+    // Booleans are last: every non-`#f` value is "true" in Scheme, so testing
+    // this first would swallow strings, symbols and numbers alike.
+    Ok(ConfigValue::Boolean(value.is_true()))
+}
+
+// ---------------------------------------------------------------------------
 // Result conversion
 // ---------------------------------------------------------------------------
+
+impl ConfigValue {
+    /// Render as the Scheme value `(get-config)` should return.
+    fn to_scm(&self) -> Scm {
+        match self {
+            Self::Integer(n) => Scm::from_i128(*n),
+            Self::Real(x) => Scm::from_f64(*x),
+            Self::Boolean(b) => Scm::from_bool(*b),
+            Self::Str(s) => Scm::from_str_lossy(s),
+            Self::Symbol(s) => Scm::symbol(s),
+        }
+    }
+}
 
 /// Convert a JSON value into Scheme.
 ///
@@ -209,6 +272,22 @@ unsafe extern "C" fn p_rpc_call(method: bindings::SCM, params: bindings::SCM) ->
     })
 }
 
+unsafe extern "C" fn p_get_config(key: bindings::SCM) -> bindings::SCM {
+    guard("%get-config", || {
+        let key = arg_config_key(Scm::from_raw(key))?;
+        bridge::config()?.get(key).map(|v| v.to_scm())
+    })
+}
+
+unsafe extern "C" fn p_set_config(key: bindings::SCM, value: bindings::SCM) -> bindings::SCM {
+    guard("%set-config!", || {
+        let key = arg_config_key(Scm::from_raw(key))?;
+        let value = arg_config_value(Scm::from_raw(value))?;
+        bridge::config()?.set(key, value)?;
+        Ok(Scm::symbol("ok"))
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -250,6 +329,8 @@ fn register_primitives() {
     register_subrs! {
         "%get-block-height" => (0, 0, 0, p_get_block_height),
         "%rpc-call"         => (1, 1, 0, p_rpc_call),
+        "%get-config"       => (1, 0, 0, p_get_config),
+        "%set-config!"      => (2, 0, 0, p_set_config),
     }
 }
 

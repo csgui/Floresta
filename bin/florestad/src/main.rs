@@ -34,11 +34,13 @@ use clap::Parser;
 use cli::Cli;
 use floresta_node::Config;
 use floresta_node::Florestad;
+use floresta_node::LogLevelControl;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tokio::time::timeout;
 use tracing::Level;
 use tracing::info;
+use tracing_subscriber::EnvFilter;
 
 #[cfg(unix)]
 use crate::daemonize::Daemon;
@@ -62,7 +64,7 @@ fn main() {
     // Resolved before `datadir` is moved into the config below.
     let log_file = resolve_log_file(params.no_log_file, params.log_file.as_ref(), &datadir);
 
-    let config = Config {
+    let mut config = Config {
         datadir,
         disable_dns_seeds: !params.connect.is_empty() || params.disable_dns_seeds,
         network: params.network,
@@ -116,6 +118,7 @@ fn main() {
         dossel_socket: params.dossel_socket,
         #[cfg(feature = "dossel")]
         dossel_init_file: params.load,
+        log_level_control: None,
     };
 
     // Warned before forking, while stderr is still attached to the terminal.
@@ -145,12 +148,29 @@ fn main() {
     };
 
     // The guard must stay alive until the end of `main` to flush file logs when dropped.
-    let (_logger_guard, _log_reload) = start_logger(config.log_file.as_ref(), config.log_to_stdout, log_level)
-        .unwrap_or_else(|e| {
-            let path = config.log_file.as_deref().unwrap_or(Path::new(""));
-            eprintln!("Could not open log file {}: {e}", path.display());
-            exit(1);
-        });
+    // The reload handle backs the Dossel `log-level` config key, letting a
+    // REPL session change the filter of a running node.
+    let (_logger_guard, log_reload) =
+        start_logger(config.log_file.as_ref(), config.log_to_stdout, log_level).unwrap_or_else(
+            |e| {
+                let path = config.log_file.as_deref().unwrap_or(Path::new(""));
+                eprintln!("Could not open log file {}: {e}", path.display());
+                exit(1);
+            },
+        );
+
+    let get_reload = log_reload.clone();
+    config.log_level_control = Some(LogLevelControl {
+        get: Arc::new(move || -> String {
+            get_reload
+                .with_current(|filter| filter.to_string())
+                .unwrap_or_else(|_| "<logger gone>".to_owned())
+        }),
+        set: Arc::new(move |spec: &str| -> Result<(), String> {
+            let filter = EnvFilter::try_new(spec).map_err(|e| e.to_string())?;
+            log_reload.reload(filter).map_err(|e| e.to_string())
+        }),
+    });
 
     let _rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

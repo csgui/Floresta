@@ -14,10 +14,11 @@
 //! # Current surface
 //!
 //! The primitive surface is deliberately minimal and grown one procedure at a
-//! time from a from-scratch redesign (see `guile/module.rs`): `get-block-height`
-//! and `rpc-call` so far. These tests cover exactly that, plus the REPL
-//! mechanics themselves — session independence, error resilience, socket
-//! permissions — not a wide API surface, because there isn't one yet.
+//! time from a from-scratch redesign (see `guile/module.rs`): `get-block-height`,
+//! `rpc-call`, `get-config` and `set-config!` so far. These tests cover exactly
+//! that, plus the REPL mechanics themselves — session independence, error
+//! resilience, socket permissions — not a wide API surface, because there
+//! isn't one yet.
 
 use std::io::Read;
 use std::io::Write;
@@ -29,12 +30,24 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use std::time::Instant;
 
+use floresta_dossel::ConfigKey;
+use floresta_dossel::ConfigValue;
 use floresta_dossel::DosselConfig;
 use floresta_dossel::DosselRuntime;
+use floresta_dossel::RuntimeConfig;
+use floresta_dossel::config::FnBackend;
+use floresta_dossel::config::StaticBackend;
 use floresta_dossel::testing::MockApi;
 
 /// How long to wait for the REPL to produce a prompt before failing a test.
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Serializes the tests that mutate shared node state.
+///
+/// `ban-threshold` is backed by one cell shared by every session — that is the
+/// point of it — so two tests writing it concurrently would race. Reading tests
+/// need no lock.
+static MUTATES_CONFIG: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 struct Harness {
     socket: PathBuf,
@@ -52,6 +65,51 @@ fn harness() -> &'static Harness {
         let dir = PathBuf::from(format!("/tmp/dossel-test-{}", std::process::id()));
         let socket = dir.join("repl.sock");
 
+        let config = RuntimeConfig::new();
+        config.bind(
+            ConfigKey::Network,
+            Arc::new(StaticBackend::new(ConfigValue::Symbol("regtest".to_owned()))),
+        );
+        config.bind(
+            ConfigKey::Datadir,
+            Arc::new(StaticBackend::new(ConfigValue::Str(
+                dir.display().to_string(),
+            ))),
+        );
+        config.bind(
+            ConfigKey::Version,
+            Arc::new(StaticBackend::new(ConfigValue::Str("0.9.0-test".to_owned()))),
+        );
+
+        // A genuinely writable key, so the tests can exercise the write path:
+        // validation, the backend call, and reading the new value back. In
+        // florestad this key is bound read-only, because Floresta has no way to
+        // change `max_banscore` on a running node.
+        let ban_threshold = Arc::new(std::sync::atomic::AtomicI64::new(100));
+        config.bind(
+            ConfigKey::BanThreshold,
+            Arc::new(FnBackend::read_write(
+                {
+                    let cell = Arc::clone(&ban_threshold);
+                    move || {
+                        Ok(ConfigValue::Integer(i128::from(
+                            cell.load(std::sync::atomic::Ordering::SeqCst),
+                        )))
+                    }
+                },
+                {
+                    let cell = Arc::clone(&ban_threshold);
+                    move |value| {
+                        let ConfigValue::Integer(n) = value else {
+                            unreachable!("ban-threshold is validated as an integer")
+                        };
+                        cell.store(n as i64, std::sync::atomic::Ordering::SeqCst);
+                        Ok(())
+                    }
+                },
+            )),
+        );
+
         let tokio = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
@@ -65,6 +123,7 @@ fn harness() -> &'static Harness {
                     init_file: None,
                 },
                 Arc::new(MockApi::default()),
+                config,
             )
             .expect("Dossel failed to start")
         });
@@ -244,6 +303,82 @@ fn rpc_passthrough_round_trips_json() {
     // A JSON array comes back as a Scheme list.
     let params = s.eval(r#"(assq-ref (rpc-call "getblockhash" '(7)) 'params)"#);
     assert!(params.contains('7'), "got {params}");
+}
+
+#[test]
+fn read_only_config_can_be_read_but_not_written() {
+    let mut s = Session::open();
+
+    assert!(s.eval("(get-config 'network)").contains("regtest"));
+
+    let denied = s.eval("(set-config! 'network 'mainnet)");
+    assert!(
+        denied.contains("read-only"),
+        "network must be rejected as read-only, got {denied}"
+    );
+}
+
+#[test]
+fn unbound_config_keys_explain_themselves() {
+    let mut s = Session::open();
+
+    // The spec's headline example. It cannot work in this build, and the error
+    // has to say why rather than pretending the write succeeded.
+    let out = s.eval("(set-config! 'max-peers 32)");
+    assert!(
+        out.contains("MAX_OUTGOING_PEERS"),
+        "max-peers must name the compile-time const, got {out}"
+    );
+
+    let log = s.eval("(set-config! 'log-level 'debug)");
+    assert!(
+        log.contains("no log-level backend"),
+        "log-level must explain the missing backend, got {log}"
+    );
+}
+
+#[test]
+fn a_bound_key_can_be_written_and_read_back() {
+    let _guard = MUTATES_CONFIG.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = Session::open();
+
+    assert!(s.eval("(get-config 'ban-threshold)").contains("100"));
+    assert!(s.eval("(set-config! 'ban-threshold 50)").contains("ok"));
+    assert!(
+        s.eval("(get-config 'ban-threshold)").contains("50"),
+        "a write must be visible to the next read, in the same session"
+    );
+
+    // ...and to a different session, since the backend is the node's state and
+    // not per-session Scheme state.
+    let mut other = Session::open();
+    assert!(other.eval("(get-config 'ban-threshold)").contains("50"));
+
+    // Restore, so test ordering cannot matter.
+    other.eval("(set-config! 'ban-threshold 100)");
+}
+
+#[test]
+fn out_of_range_values_are_rejected() {
+    let _guard = MUTATES_CONFIG.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = Session::open();
+
+    let negative = s.eval("(set-config! 'ban-threshold -1)");
+    assert!(
+        negative.contains("non-negative"),
+        "expected a range complaint, got {negative}"
+    );
+    s.eval(",q");
+
+    let wrong_type = s.eval(r#"(set-config! 'ban-threshold "many")"#);
+    assert!(
+        wrong_type.contains("exact non-negative integer"),
+        "expected a type complaint, got {wrong_type}"
+    );
+    s.eval(",q");
+
+    // The value survived both rejections.
+    assert!(s.eval("(get-config 'ban-threshold)").contains("100"));
 }
 
 #[test]

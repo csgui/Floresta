@@ -35,6 +35,7 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 
 use crate::api::FlorestaExtensionApi;
+use crate::config::RuntimeConfig;
 use crate::error::ApiError;
 use crate::error::ApiResult;
 
@@ -42,6 +43,13 @@ use crate::error::ApiResult;
 pub(crate) struct Attachment {
     api: Arc<dyn FlorestaExtensionApi>,
     runtime: Handle,
+    config: RuntimeConfig,
+}
+
+impl Attachment {
+    pub(crate) const fn config(&self) -> &RuntimeConfig {
+        &self.config
+    }
 }
 
 /// Set once, at node startup, before the REPL server begins accepting clients.
@@ -52,13 +60,28 @@ static ATTACHED: OnceLock<Attachment> = OnceLock::new();
 /// Returns `false` if an attachment already exists, which happens if a node is
 /// started twice in one process (some integration tests do this). The first
 /// attachment wins; the node handle is not swapped underneath live sessions.
-pub(crate) fn attach(api: Arc<dyn FlorestaExtensionApi>, runtime: Handle) -> bool {
-    ATTACHED.set(Attachment { api, runtime }).is_ok()
+pub(crate) fn attach(
+    api: Arc<dyn FlorestaExtensionApi>,
+    runtime: Handle,
+    config: RuntimeConfig,
+) -> bool {
+    ATTACHED
+        .set(Attachment {
+            api,
+            runtime,
+            config,
+        })
+        .is_ok()
 }
 
 /// The current attachment, or [`ApiError::Detached`] if Dossel is not attached.
 pub(crate) fn attachment() -> ApiResult<&'static Attachment> {
     ATTACHED.get().ok_or(ApiError::Detached)
+}
+
+/// Access the runtime configuration surface.
+pub(crate) fn config() -> ApiResult<&'static RuntimeConfig> {
+    attachment().map(Attachment::config)
 }
 
 /// Run an async node call from a Scheme primitive.
