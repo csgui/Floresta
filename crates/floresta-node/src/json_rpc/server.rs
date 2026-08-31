@@ -690,6 +690,16 @@ impl<Blockchain: RpcChain> RpcImpl<Blockchain> {
         }
     }
 
+    /// Dispatch a single JSON-RPC request against this state.
+    ///
+    /// The same entry point the HTTP handler uses, minus the transport. Only
+    /// Dossel needs this; the HTTP path calls `handle_json_rpc_request`
+    /// directly from its axum handler.
+    #[cfg(feature = "dossel")]
+    pub async fn dispatch(self: Arc<Self>, request: RpcRequest) -> Result<Value> {
+        handle_json_rpc_request(request, self).await
+    }
+
     /// Serve HTTP JSON-RPC on `address` until the process ends.
     pub async fn serve(self: Arc<Self>, address: Option<SocketAddr>) {
         let address = address.unwrap_or_else(|| {

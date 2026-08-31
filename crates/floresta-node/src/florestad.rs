@@ -510,8 +510,15 @@ impl Florestad {
         let wallet = Arc::new(wallet);
 
         // JSON-RPC
+        //
+        // Built as a shared `Arc` rather than spawned directly, so Dossel's
+        // `(rpc-call ...)` can dispatch against the same state instead of
+        // opening a loopback HTTP connection to our own port.
         #[cfg(feature = "json-rpc")]
-        {
+        // Only Dossel reads this binding back; without that feature the `Arc`
+        // is still needed to build and serve, it just has no second consumer.
+        #[cfg_attr(not(feature = "dossel"), allow(unused_variables))]
+        let rpc_impl = {
             let rpc = Arc::new(json_rpc::server::RpcImpl::new(
                 blockchain_state.clone(),
                 wallet.clone(),
@@ -536,6 +543,8 @@ impl Florestad {
             if self.json_rpc.set(server).is_err() {
                 core::panic!("We should be the first one setting this");
             }
+
+            rpc
         };
 
         // Dossel: the embedded Guile REPL.
@@ -544,7 +553,12 @@ impl Florestad {
         // node startup: if the REPL cannot come up, the node should still run.
         #[cfg(feature = "dossel")]
         if self.config.dossel {
-            self.start_dossel(blockchain_state.clone(), datadir);
+            self.start_dossel(
+                blockchain_state.clone(),
+                datadir,
+                #[cfg(feature = "json-rpc")]
+                Arc::clone(&rpc_impl),
+            );
         }
 
         // Electrum Server configuration.
@@ -696,7 +710,12 @@ impl Florestad {
     /// be able to stop a node from serving blocks. The node runs perfectly well
     /// without a REPL.
     #[cfg(feature = "dossel")]
-    fn start_dossel(&self, chain: Arc<ChainState<ChainStore>>, datadir: &Path) {
+    fn start_dossel(
+        &self,
+        chain: Arc<ChainState<ChainStore>>,
+        datadir: &Path,
+        #[cfg(feature = "json-rpc")] rpc: Arc<json_rpc::server::RpcImpl<Arc<ChainState<ChainStore>>>>,
+    ) {
         use floresta_dossel::DosselConfig;
         use floresta_dossel::DosselRuntime;
 
@@ -711,6 +730,9 @@ impl Florestad {
             init_file: self.config.dossel_init_file.clone(),
         };
 
+        #[cfg(feature = "json-rpc")]
+        let api = crate::dossel::NodeExtensionApi::new(chain, rpc);
+        #[cfg(not(feature = "json-rpc"))]
         let api = crate::dossel::NodeExtensionApi::new(chain);
 
         match DosselRuntime::spawn(config, Arc::new(api)) {
