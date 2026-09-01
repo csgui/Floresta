@@ -85,10 +85,18 @@
 ;;; identity (hashq, i.e. eq?), so each connection gets exactly one
 ;;; automatic banner regardless of how many lines it sends afterward.
 ;;; (clear), below, can always bring it back on demand.
+;;;
+;;; The screen is cleared first, same as (clear) does, so this also erases
+;;; whatever the client's terminal already has on it -- notably Guile's own
+;;; version/copyright banner on Guile builds too old to have
+;;; %inhibit-welcome-message (added upstream in Guile 3.0.10; 3.0.9 and
+;;; earlier print it unconditionally, since the guard above only prevents an
+;;; unbound-variable error, not the banner itself on those builds).
 (define *greeted* (make-hash-table))
 (define (dossel-prompt repl)
   (unless (hashq-ref *greeted* repl)
     (hashq-set! *greeted* repl #t)
+    (display ansi-clear-screen)
     (dossel-banner))
   (string-append ansi-bold canopy "dossel> " ansi-reset))
 (repl-default-prompt-set! dossel-prompt)
