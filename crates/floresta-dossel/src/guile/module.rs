@@ -122,7 +122,9 @@ fn arg_config_key(value: Scm) -> ApiResult<ConfigKey> {
             .map(|k| k.as_symbol())
             .collect::<Vec<_>>()
             .join(", ");
-        ApiError::NotFound(format!("unknown config key '{name}; known keys are {known}"))
+        ApiError::NotFound(format!(
+            "unknown config key '{name}; known keys are {known}"
+        ))
     })
 }
 
@@ -188,12 +190,11 @@ fn json_to_scm(value: &serde_json::Value) -> Scm {
         serde_json::Value::Array(items) => {
             Scm::list(items.iter().map(json_to_scm).collect::<Vec<_>>())
         }
-        serde_json::Value::Object(map) => map
-            .iter()
-            .rev()
-            .fold(Scm::eol(), |tail, (key, value)| {
+        serde_json::Value::Object(map) => {
+            map.iter().rev().fold(Scm::eol(), |tail, (key, value)| {
                 Scm::acons(Scm::symbol(key), json_to_scm(value), tail)
-            }),
+            })
+        }
     }
 }
 
@@ -260,7 +261,11 @@ unsafe extern "C" fn p_rpc_call(method: bindings::SCM, params: bindings::SCM) ->
         let params = if params_scm.is_undefined() || params_scm.is_null() {
             Vec::new()
         } else if params_scm.is_pair() {
-            params_scm.list_to_vec().into_iter().map(scm_to_json).collect()
+            params_scm
+                .list_to_vec()
+                .into_iter()
+                .map(scm_to_json)
+                .collect()
         } else {
             return Err(ApiError::InvalidArgument(format!(
                 "params must be a list, got {}",

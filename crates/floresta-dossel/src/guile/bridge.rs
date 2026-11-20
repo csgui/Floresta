@@ -29,8 +29,8 @@
 //! session that made the call.
 
 use std::future::Future;
-use std::sync::OnceLock;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use tokio::runtime::Handle;
 

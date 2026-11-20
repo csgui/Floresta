@@ -26,9 +26,8 @@ use crate::error::DosselError;
 /// is silently truncated by `bind(2)` rather than rejected — which would leave
 /// the node listening somewhere other than where it logged. Better to refuse up
 /// front with a message that says what to do.
-const SUN_PATH_MAX: usize = size_of::<libc::sockaddr_un>()
-    - offset_of!(libc::sockaddr_un, sun_path)
-    - 1; // trailing NUL
+const SUN_PATH_MAX: usize =
+    size_of::<libc::sockaddr_un>() - offset_of!(libc::sockaddr_un, sun_path) - 1; // trailing NUL
 
 /// Permissions for the REPL socket: owner read/write only.
 ///
@@ -136,11 +135,9 @@ pub(crate) fn start(path: &Path) -> Result<(), DosselError> {
 /// where there may be no server to stop. Errors are returned for logging rather
 /// than propagated.
 pub(crate) fn stop() -> Result<(), String> {
-    safe::eval_string(
-        "(begin (use-modules (system repl server)) (stop-server-and-clients!))",
-    )
-    .map(|_| ())
-    .map_err(|e| e.to_string())
+    safe::eval_string("(begin (use-modules (system repl server)) (stop-server-and-clients!))")
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Render `s` as a Scheme string literal, escaping backslashes and quotes.

@@ -18,6 +18,8 @@ mod json_rpc;
 #[cfg(feature = "zmq-server")]
 mod zmq;
 
+#[cfg(feature = "dossel")]
+pub use dossel::NodeExtensionApi;
 pub use florestad::AssumeUtreexoValue;
 pub use florestad::AssumeValidArg;
 pub use florestad::Config;
@@ -25,6 +27,3 @@ pub use florestad::Florestad;
 pub use florestad::LogLevelControl;
 #[cfg(feature = "json-rpc")]
 pub use json_rpc::auth::basic;
-
-#[cfg(feature = "dossel")]
-pub use dossel::NodeExtensionApi;

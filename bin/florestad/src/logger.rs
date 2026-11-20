@@ -312,11 +312,9 @@ pub fn start_logger(
 ) -> Result<(Option<WorkerGuard>, reload::Handle<EnvFilter, Registry>), io::Error> {
     let is_debug = log_level >= Level::DEBUG;
 
-    // One filter shared by the human-facing layers, reloadable at runtime (the
-    // Dossel REPL exposes it as the `log-level` config key). Both output layers
-    // saw identical per-layer filters before, so sharing one changes nothing for
-    // existing users. It stays a per-layer filter (not a global one) so the
-    // `tokio-console` layer still receives its `tokio=trace` events.
+    // Share a reloadable filter between the output layers. It is a per-layer
+    // filter, not a global one, so the `tokio-console` layer still gets its
+    // `tokio=trace` events.
     let (filter, reload_handle) = reload::Layer::new(
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level.to_string())),
     );

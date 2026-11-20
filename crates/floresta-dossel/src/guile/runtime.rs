@@ -200,7 +200,10 @@ fn run_in_guile(config: &DosselConfig, shutdown: &AtomicBool) -> Result<(), Stri
 
         outcome = match result {
             Ok(inner) => inner,
-            Err(payload) => Err(format!("panic in the Guile thread: {}", panic_text(&payload))),
+            Err(payload) => Err(format!(
+                "panic in the Guile thread: {}",
+                panic_text(&payload)
+            )),
         };
     });
 
@@ -229,10 +232,7 @@ fn guile_main(config: &DosselConfig, shutdown: &AtomicBool) -> Result<(), String
 
     repl::start(&config.socket_path).map_err(|e| e.to_string())?;
 
-    info!(
-        "Dossel REPL listening on {}",
-        config.socket_path.display()
-    );
+    info!("Dossel REPL listening on {}", config.socket_path.display());
 
     // Nothing left to do but wait: clients are served on Guile's own threads.
     while !shutdown.load(Ordering::SeqCst) {

@@ -340,9 +340,12 @@ impl RuntimeConfig {
     pub fn new() -> Self {
         let mut bindings = HashMap::with_capacity(ConfigKey::ALL.len());
         for key in ConfigKey::ALL {
-            bindings.insert(key, Binding::Unbound(Unbound {
-                reason: default_unbound_reason(key),
-            }));
+            bindings.insert(
+                key,
+                Binding::Unbound(Unbound {
+                    reason: default_unbound_reason(key),
+                }),
+            );
         }
 
         Self {
@@ -352,8 +355,7 @@ impl RuntimeConfig {
 
     /// Attach a backend to `key`, replacing any previous binding.
     pub fn bind(&self, key: ConfigKey, backend: Arc<dyn ConfigBackend>) {
-        self.write_table()
-            .insert(key, Binding::Bound(backend));
+        self.write_table().insert(key, Binding::Bound(backend));
     }
 
     /// Read a key.
