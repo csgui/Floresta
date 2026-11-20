@@ -28,6 +28,7 @@ use std::process::exit;
 use tracing::Level;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 use tracing_subscriber::fmt::FmtContext;
 use tracing_subscriber::fmt::FormatEvent;
 use tracing_subscriber::fmt::FormatFields;
@@ -264,10 +265,7 @@ pub fn start_logger(
 
     let is_debug = log_level >= Level::DEBUG;
 
-    // One filter for the whole registry, reloadable at runtime (the Dossel
-    // REPL exposes it as the `log-level` config key). Both output layers saw
-    // identical per-layer filters before, so hoisting it here changes
-    // nothing for existing users.
+    // Share a reloadable filter between the output layers.
     let (filter, reload_handle) = reload::Layer::new(
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level.to_string())),
     );
@@ -311,9 +309,7 @@ pub fn start_logger(
     });
 
     tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt_layer_stdout)
-        .with(fmt_layer_logfile)
+        .with(Layer::and_then(fmt_layer_stdout, fmt_layer_logfile).with_filter(filter))
         .init();
 
     Ok((guard, reload_handle))

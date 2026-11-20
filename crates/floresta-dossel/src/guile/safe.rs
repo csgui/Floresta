@@ -151,9 +151,8 @@ impl Scm {
 
     /// Build a Scheme symbol. NUL handling as [`Scm::from_str_lossy`].
     pub(crate) fn symbol(s: &str) -> Self {
-        let c = CString::new(s).unwrap_or_else(|_| {
-            CString::new(s.replace('\0', "\u{fffd}")).unwrap_or_default()
-        });
+        let c = CString::new(s)
+            .unwrap_or_else(|_| CString::new(s.replace('\0', "\u{fffd}")).unwrap_or_default());
 
         // SAFETY: as `from_str_lossy`; `scm_from_utf8_symbol` interns a copy.
         Self(unsafe { bindings::scm_from_utf8_symbol(c.as_ptr()) })
@@ -567,9 +566,8 @@ where
 pub(crate) fn eval_string(code: &str) -> Result<Scm, GuileException> {
     // Built outside the closure so no allocation happens inside the `catch`
     // body, where a `longjmp` would skip its destructor.
-    let c_code = CString::new(code).unwrap_or_else(|_| {
-        CString::new(code.replace('\0', " ")).unwrap_or_default()
-    });
+    let c_code = CString::new(code)
+        .unwrap_or_else(|_| CString::new(code.replace('\0', " ")).unwrap_or_default());
 
     catch(|| {
         // SAFETY: `c_code` is a valid NUL-terminated string that outlives the
@@ -600,25 +598,13 @@ pub(crate) fn load_file(path: &str) -> Result<Scm, GuileException> {
 /// wrong is a type-confused call through a function pointer. Callers in
 /// [`super::module`] pair each registration with its handler directly so the two
 /// cannot drift apart.
-pub(crate) unsafe fn define_gsubr(
-    name: &str,
-    req: i32,
-    opt: i32,
-    rest: i32,
-    func: *mut c_void,
-) {
+pub(crate) unsafe fn define_gsubr(name: &str, req: i32, opt: i32, rest: i32, func: *mut c_void) {
     let c_name = CString::new(name).unwrap_or_default();
 
     // SAFETY: `c_name` outlives the call; libguile copies the name. The arity
     // contract on `func` is the caller's obligation, documented above.
     unsafe {
-        bindings::scm_c_define_gsubr(
-            c_name.as_ptr().cast::<c_char>(),
-            req,
-            opt,
-            rest,
-            func,
-        );
+        bindings::scm_c_define_gsubr(c_name.as_ptr().cast::<c_char>(), req, opt, rest, func);
     }
 }
 

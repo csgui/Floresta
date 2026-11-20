@@ -737,7 +737,6 @@ impl<Blockchain: RpcChain> RpcImpl<Blockchain> {
             .await
             .expect("failed to start rpc server");
     }
-
 }
 
 /// Converts a script to ASM (assembly) format, displaying the script's operations

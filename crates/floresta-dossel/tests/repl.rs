@@ -68,7 +68,9 @@ fn harness() -> &'static Harness {
         let config = RuntimeConfig::new();
         config.bind(
             ConfigKey::Network,
-            Arc::new(StaticBackend::new(ConfigValue::Symbol("regtest".to_owned()))),
+            Arc::new(StaticBackend::new(ConfigValue::Symbol(
+                "regtest".to_owned(),
+            ))),
         );
         config.bind(
             ConfigKey::Datadir,
@@ -78,7 +80,9 @@ fn harness() -> &'static Harness {
         );
         config.bind(
             ConfigKey::Version,
-            Arc::new(StaticBackend::new(ConfigValue::Str("0.9.0-test".to_owned()))),
+            Arc::new(StaticBackend::new(ConfigValue::Str(
+                "0.9.0-test".to_owned(),
+            ))),
         );
 
         // A genuinely writable key, so the tests can exercise the write path:
@@ -169,7 +173,10 @@ fn connect_with_retry(path: &Path) -> UnixStream {
         }
     }
 
-    panic!("could not connect to the REPL at {}: {last:?}", path.display());
+    panic!(
+        "could not connect to the REPL at {}: {last:?}",
+        path.display()
+    );
 }
 
 /// Strip ANSI CSI escape sequences (color codes, clear-screen, cursor moves).

@@ -348,11 +348,7 @@ impl Florestad {
             // Taken out of the mutex because shutting down consumes the handle.
             // Done before the stop signal so that REPL sessions are closed
             // while the node can still answer whatever they have in flight.
-            let runtime = self
-                .dossel
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .take();
+            let runtime = self.dossel.lock().unwrap_or_else(|e| e.into_inner()).take();
 
             if let Some(runtime) = runtime {
                 runtime.shutdown();
@@ -740,7 +736,9 @@ impl Florestad {
         chain: Arc<ChainState<ChainStore>>,
         node: floresta_wire::node_handle::NodeHandle,
         datadir: &Path,
-        #[cfg(feature = "json-rpc")] rpc: Arc<json_rpc::server::RpcImpl<Arc<ChainState<ChainStore>>>>,
+        #[cfg(feature = "json-rpc")] rpc: Arc<
+            json_rpc::server::RpcImpl<Arc<ChainState<ChainStore>>>,
+        >,
     ) {
         use floresta_dossel::DosselConfig;
         use floresta_dossel::DosselRuntime;

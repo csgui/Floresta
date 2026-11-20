@@ -37,12 +37,11 @@ use floresta_wire::node_handle::NodeHandle;
 use floresta_wire::node_interface::NodeConfigMethods;
 use tokio::runtime::Handle;
 
+use crate::florestad::LogLevelControl;
 #[cfg(feature = "json-rpc")]
 use crate::json_rpc::request::RpcRequest;
 #[cfg(feature = "json-rpc")]
 use crate::json_rpc::server::RpcImpl;
-
-use crate::florestad::LogLevelControl;
 
 /// Map a `RecvError` from the node channel onto an API error.
 ///
@@ -104,19 +103,16 @@ where
             id: serde_json::Value::String("dossel".to_owned()),
         };
 
-        Arc::clone(&self.rpc)
-            .dispatch(request)
-            .await
-            .map_err(|e| {
-                // `JsonRpcError` has no `Display`; `rpc_error` is the rendering
-                // the HTTP server itself sends to clients, so the REPL sees the
-                // same wording as any other RPC caller.
-                let rendered = e.rpc_error();
-                match rendered.data {
-                    Some(data) => ApiError::Node(format!("{} ({data})", rendered.message)),
-                    None => ApiError::Node(rendered.message),
-                }
-            })
+        Arc::clone(&self.rpc).dispatch(request).await.map_err(|e| {
+            // `JsonRpcError` has no `Display`; `rpc_error` is the rendering
+            // the HTTP server itself sends to clients, so the REPL sees the
+            // same wording as any other RPC caller.
+            let rendered = e.rpc_error();
+            match rendered.data {
+                Some(data) => ApiError::Node(format!("{} ({data})", rendered.message)),
+                None => ApiError::Node(rendered.message),
+            }
+        })
     }
 
     #[cfg(not(feature = "json-rpc"))]
