@@ -65,6 +65,7 @@ This surface is grown one procedure at a time, not delivered up front -- see
 `rpc-call` reaches every JSON-RPC method florestad implements, whether or
 not there is a dedicated wrapper for it yet."
   (format #t "~%Dossel - the Floresta node REPL~%~%")
+  (format #t "Chat~%  (chat)                                  talk to a local Ollama model~%~%")
   (format #t "Chain~%")
   (format #t "  (get-block-height)                     current tip height~%")
   (format #t "    (get-block-height) => 320169~%~%")
@@ -86,3 +87,23 @@ not there is a dedicated wrapper for it yet."
   (format #t "Sessions share the (guile-user) module, so a definition made in~%")
   (format #t "one session is visible in every other one, including later ones.~%~%")
   (values))
+
+;;; Conversation with a local Ollama model.
+(define (chat)
+  "Chat with a local Ollama model. Type :q to return to Scheme."
+  (use-modules (ice-9 rdelim))
+  (format #t "Chat with Dossel (type :q to return to the REPL).~%")
+  (let loop ((history "[]"))
+    (display "you> ") (force-output)
+    (let ((line (read-line)))
+      (unless (or (eof-object? line) (string=? line ":q"))
+        (let ((result
+                (catch #t
+                  (lambda () (%chat line history))
+                  (lambda (key . args)
+                    (format #t "Chat error: ~a ~a~%" key args)
+                    #f))))
+          (if result
+              (begin (format #t "dossel> ~a~%" (car result))
+                     (loop (cadr result)))
+              (loop history)))))))

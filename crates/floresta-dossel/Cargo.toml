@@ -17,6 +17,7 @@ serde_json = { workspace = true }
 thiserror = { version = "=2.0.20" }
 tokio = { workspace = true }
 tracing = { workspace = true }
+ureq = { version = "=3.3.0", default-features = false, features = ["json"] }
 
 [build-dependencies]
 bindgen = { version = "=0.72.1" }

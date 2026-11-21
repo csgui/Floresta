@@ -73,6 +73,7 @@
 //! [`config::ConfigBackend`] for it. No change to the Scheme layer is needed.
 
 pub mod api;
+mod chat;
 pub mod config;
 pub mod error;
 mod guile;

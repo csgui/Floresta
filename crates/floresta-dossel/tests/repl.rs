@@ -258,6 +258,14 @@ impl Session {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn chat_mode_returns_to_the_repl() {
+    let mut session = Session::open();
+    assert!(session.eval("(chat)").contains("you> "));
+    assert!(session.eval(":q").contains("dossel> "));
+    assert!(session.eval("(get-block-height)").contains("840443"));
+}
+
+#[test]
 fn chain_queries_answer_from_the_node() {
     let mut s = Session::open();
 

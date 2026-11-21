@@ -236,6 +236,22 @@ fn scm_to_json(value: Scm) -> serde_json::Value {
 // Each is an `extern "C"` function whose arity must match its registration in
 // `SUBRS` below. The macro at the bottom keeps the two together.
 
+unsafe extern "C" fn p_chat(question: bindings::SCM, history: bindings::SCM) -> bindings::SCM {
+    guard("%chat", || {
+        let question = Scm::from_raw(question)
+            .as_string()
+            .ok_or_else(|| ApiError::InvalidArgument("question must be a string".into()))?;
+        let history = Scm::from_raw(history)
+            .as_string()
+            .ok_or_else(|| ApiError::InvalidArgument("history must be a string".into()))?;
+        let (answer, history) = crate::chat::ask(&question, &history)?;
+        Ok(Scm::list(vec![
+            Scm::from_str_lossy(&answer),
+            Scm::from_str_lossy(&history),
+        ]))
+    })
+}
+
 unsafe extern "C" fn p_get_block_height() -> bindings::SCM {
     guard("%get-block-height", || {
         bridge::call(|api| api.get_block_height()).map(Scm::from_u32)
@@ -332,6 +348,7 @@ macro_rules! register_subrs {
 /// it does is registration, which cannot fail short of allocation failure.
 fn register_primitives() {
     register_subrs! {
+        "%chat"             => (2, 0, 0, p_chat),
         "%get-block-height" => (0, 0, 0, p_get_block_height),
         "%rpc-call"         => (1, 1, 0, p_rpc_call),
         "%get-config"       => (1, 0, 0, p_get_config),
