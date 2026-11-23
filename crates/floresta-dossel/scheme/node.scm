@@ -94,7 +94,7 @@ not there is a dedicated wrapper for it yet."
   (use-modules (ice-9 rdelim))
   (format #t "Chat with Dossel (type :q to return to the REPL).~%")
   (let loop ((history "[]"))
-    (display "you> ") (force-output)
+    (display (string-append (ansi "34") "you>" ansi-reset " ")) (force-output)
     (let ((line (read-line)))
       (unless (or (eof-object? line) (string=? line ":q"))
         (let ((result
@@ -104,6 +104,6 @@ not there is a dedicated wrapper for it yet."
                     (format #t "Chat error: ~a ~a~%" key args)
                     #f))))
           (if result
-              (begin (format #t "dossel> ~a~%" (car result))
+              (begin (format #t "~adossel>~a ~a~%" canopy ansi-reset (car result))
                      (loop (cadr result)))
               (loop history)))))))
